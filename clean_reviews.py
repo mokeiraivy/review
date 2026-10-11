@@ -120,9 +120,10 @@ def main():
 
     pd.set_option("display.max_rows", None, "display.max_columns", None,
                   "display.max_colwidth", 70, "display.width", 250)
-    # Print what the later stages use: the ID they key on, the text they
-    # quote, and the tag slot they fill. The CSV keeps every column.
-    table_cols = ["review_id", TEXT_COL, TAG_COL]
+    # Fields a reviewer of this stage checks in the printout: the stable ID,
+    # where and when each review came from, the text, and the empty tag slot
+    # the next stage fills. The CSV keeps every column.
+    table_cols = ["review_id", "store", "review_date", TEXT_COL, TAG_COL]
     report = (
         f"Source file:          {args.export}\n"
         f"Starting rows:        {s['start']}\n"

@@ -1,4 +1,8 @@
 # Weekly Review Digest — Stage 1: Clean reviews
+
+Cleans this week's Canva mobile editor reviews (App Store + Google Play) into a
+pandas table, one review per row. Every later stage counts and quotes these rows.
+
 ## Run
 
 ```bash
@@ -42,8 +46,8 @@ every run, even if rows are reordered or new ones are added.
 
 **Tag column.** Every kept row gets an empty `tag` column. The next stage (LLM
 tagging) writes each review's theme into it, and counts are made from those tags.
-The printout shows `review_id`, `review_text` and `tag`, which are the columns
-later stages use. The CSV keeps every column.
+The printout shows `review_id`, `store`, `review_date`, `review_text` and `tag`,
+so a reviewer can check each row from the printout alone. The CSV keeps every column.
 
 `review_text` is kept exactly as in the export (only leading and trailing spaces
 are trimmed) so later quote checks can match it word for word.
