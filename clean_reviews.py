@@ -35,6 +35,11 @@ Stable ID
     if rows are reordered or new rows are added. Kept rows can't collide,
     because two rows with the same key are duplicates and only one is kept.
 
+Tag column
+    Every kept row gets an empty "tag" column. The next stage (the LLM
+    tagging step) writes each review's theme into it, and the counts are
+    made from those tags. It is blank on every row after cleaning.
+
 The review_text itself is kept exactly as in the export (only leading and
 trailing whitespace is trimmed) so later quotes can be matched word for word.
 """
@@ -49,6 +54,7 @@ import pandas as pd
 
 DEFAULT_EXPORT = Path("data/Canva_Mobile_Editor_Review_Export_2-8_June_2025.csv")
 TEXT_COL = "review_text"
+TAG_COL = "tag"
 
 
 def normalise(value) -> str:
@@ -89,6 +95,10 @@ def clean(export_path: Path):
         lambda k: "rv_" + hashlib.sha1(k.encode("utf-8")).hexdigest()[:10]))
     df = df.drop(columns="_key").reset_index(drop=True)
 
+    # Slot for the next stage: the tagging step writes each review's theme
+    # (a flaw or a feature request) here. Blank on every row after cleaning.
+    df[TAG_COL] = ""
+
     stats = {
         "start": start,
         "blank": len(blanks),
@@ -110,7 +120,9 @@ def main():
 
     pd.set_option("display.max_rows", None, "display.max_columns", None,
                   "display.max_colwidth", 70, "display.width", 250)
-    table_cols = ["review_id", "store", "review_date", "star_rating", "device_model", TEXT_COL]
+    # Print what the later stages use: the ID they key on, the text they
+    # quote, and the tag slot they fill. The CSV keeps every column.
+    table_cols = ["review_id", TEXT_COL, TAG_COL]
     report = (
         f"Source file:          {args.export}\n"
         f"Starting rows:        {s['start']}\n"
