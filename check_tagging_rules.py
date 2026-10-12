@@ -6,8 +6,10 @@ Run:  python check_tagging_rules.py
 1. Each category example in the prompt is a real review, word for word.
 2. The prompt template text contains no digits, so no thresholds are buried in it.
 3. The severity thresholds are named integer constants, in order, in code.
-4. build_prompt() fills every slot and puts the review text in.
-5. The schema accepts valid output and rejects invalid output.
+4. Every rule that code enforces is written once, in tagging_schema.py, and the
+   prompt and field descriptions read it from there.
+5. build_prompt() fills every slot and puts the review text in.
+6. The schema accepts exactly one winning tag per review and rejects invalid output.
 """
 
 import re
@@ -52,51 +54,54 @@ check("thresholds are in order inside the score scale",
 mapping = {s: S.severity_label(s).value for s in range(S.IMPACT_SCORE_MIN, S.IMPACT_SCORE_MAX + 1)}
 print("       score -> severity:", mapping)
 
-# 4. Prompt renders for a real review
+# 4. Rules written once, in the schema
 sample_id = "rv_cdf86c6e0b"
 rendered = build_prompt(reviews[sample_id])
+rules = {"WINNER_RULE": S.WINNER_RULE, "THEME_RULE": S.THEME_RULE,
+         "QUOTE_RULE": S.QUOTE_RULE, "NEITHER_RULE": S.NEITHER_RULE}
+for name, text in rules.items():
+    check(f"{name} is defined once in the schema and read into the prompt",
+          text in rendered and text not in PROMPT_TEMPLATE)
+order = ", then ".join(c.value for c in S.CATEGORY_PRIORITY)
+check("winner rule order comes from CATEGORY_PRIORITY", order in S.WINNER_RULE, order)
+props = S.ReviewTag.model_json_schema()["properties"]
+check("field descriptions the model sees reuse the same rule text",
+      S.QUOTE_RULE in props["quote"]["description"]
+      and S.THEME_RULE in props["theme"]["description"]
+      and S.NEITHER_RULE in props["impact_score"]["description"])
+
+# 5. Prompt renders for a real review
 check("build_prompt fills every slot", "{" not in rendered and "}" not in rendered)
 check("rendered prompt contains the review text exactly", reviews[sample_id] in rendered)
 check("rendered prompt shows the threshold values from code",
       all(str(v) in rendered for v in values))
 
-# 5. Schema accepts valid output and rejects invalid output
+# 6. Schema: one winner per review
+# rv_cdf86c6e0b has two flaws (PDF export fails, text lag). Winner = higher impact.
 sentence = "PDF export fails at the very end and the whole app is laggy when I drag text around."
-valid = {
-    "findings": [
-        {"category": "product_flaw", "theme": "pdf export fails", "impact_score": 9,
-         "quote": sentence, "reason": "Export never finishes, so the user cannot get their file."},
-        {"category": "product_flaw", "theme": "text box lag", "impact_score": 5,
-         "quote": sentence, "reason": "Dragging text lags but still works."},
-    ]
-}
+winner = {"category": "product_flaw", "theme": "pdf export fails", "impact_score": 9,
+          "quote": sentence, "reason": "Export never finishes, which outranks the text lag."}
 try:
-    parsed = S.ReviewTagging.model_validate(valid)
-    check("schema accepts a review with two findings", True,
-          f"primary = {parsed.primary.theme} ({parsed.primary.severity.value})")
-    check("every quote in the valid sample is a real sentence of that review",
-          all(f.quote in reviews[sample_id] for f in parsed.findings))
+    tag = S.ReviewTag.model_validate(winner)
+    check("schema accepts one winning tag for a two-issue review", True,
+          f"{tag.theme} -> {tag.severity.value}")
+    check("the winning quote is a real sentence of that review", tag.quote in reviews[sample_id])
 except ValidationError as e:
-    check("schema accepts a review with two findings", False, str(e))
+    check("schema accepts one winning tag for a two-issue review", False, str(e))
 
 bad_cases = {
-    "neither with an impact score": {"findings": [
-        {"category": "neither", "impact_score": 3, "quote": "x", "reason": "x"}]},
-    "flaw without an impact score": {"findings": [
-        {"category": "product_flaw", "theme": "crash", "quote": "x", "reason": "x"}]},
-    "score above the scale": {"findings": [
-        {"category": "product_flaw", "theme": "crash", "impact_score": S.IMPACT_SCORE_MAX + 1,
-         "quote": "x", "reason": "x"}]},
-    "neither mixed with a flaw": {"findings": [
-        {"category": "neither", "quote": "x", "reason": "x"},
-        {"category": "product_flaw", "theme": "crash", "impact_score": 5, "quote": "x", "reason": "x"}]},
-    "unknown category": {"findings": [
-        {"category": "bug", "theme": "crash", "impact_score": 5, "quote": "x", "reason": "x"}]},
-    "no findings": {"findings": []},
+    "a list of two findings": {"findings": [winner, winner]},
+    "an extra field next to the winner": {**winner, "second_issue": "text box lag"},
+    "neither with an impact score": {"category": "neither", "impact_score": 3,
+                                     "quote": "x", "reason": "x"},
+    "flaw without an impact score": {"category": "product_flaw", "theme": "crash",
+                                     "quote": "x", "reason": "x"},
+    "score above the scale": {**winner, "impact_score": S.IMPACT_SCORE_MAX + 1},
+    "unknown category": {**winner, "category": "bug"},
 }
 for name, data in bad_cases.items():
     try:
-        S.ReviewTagging.model_validate(data)
+        S.ReviewTag.model_validate(data)
         check(f"schema rejects: {name}", False, "was accepted")
     except ValidationError:
         check(f"schema rejects: {name}", True)

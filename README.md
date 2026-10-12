@@ -73,11 +73,19 @@ chain in the next stage runs on exactly these files.
 | `feature_request` | `rv_e209f393ab`: "…I can't find my brand kit anywhere… Please add brand kit to mobile" | "Can't find" sounds like a bug, but brand kit isn't in the mobile editor. |
 | `neither` | `rv_5e547992d8`: "Really like the new editor… Only wish the background remover was on the free plan…" | Praise plus a pricing wish. Nothing is broken and nothing needs building. |
 
-## Output schema (what the model fills in, per finding)
+## Output schema (what the model fills in: one tag per review)
 
-`category`, `theme`, `impact_score`, `quote` (one sentence copied exactly), and `reason`.
-A review can have several findings. `neither` must be the only finding when it is used.
+`ReviewTag`: `category`, `theme`, `impact_score`, `quote` (one sentence copied exactly), and `reason`.
 `review_id` is attached in code, not by the model.
+
+**One winner per review.** If a review raises more than one issue, the model returns
+one tag. It picks the category that comes first in `CATEGORY_PRIORITY`
+(product_flaw, then feature_request, then neither), and within that category the
+issue with the highest impact score. The schema rejects a list or any extra field.
+
+**Rules written once.** `WINNER_RULE`, `THEME_RULE`, `QUOTE_RULE` and `NEITHER_RULE`
+are defined only in `tagging_schema.py`. The prompt and the field descriptions read
+them from there, so they can't disagree with the code that enforces them.
 
 ## Severity thresholds (in `tagging_schema.py`, never in the prompt text)
 
@@ -99,4 +107,4 @@ from these constants, so changing a threshold in code updates the prompt too.
 python check_tagging_rules.py
 ```
 
-Expected: `17/17 checks passed`.
+Expected: `23/23 checks passed`.

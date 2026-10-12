@@ -2,9 +2,10 @@
 Stage 2 prompt template: the fixed instruction sent to the language model for
 every review. The only slot that changes per review is {review_text}.
 
-The impact scale numbers are NOT written in this text. build_prompt() fills
-them in from the named constants in tagging_schema.py, so the thresholds live
-in one place (code) and the prompt can never drift away from them.
+Rules that code also enforces are NOT written in this text. build_prompt()
+fills them in from tagging_schema.py: the impact scale numbers, the
+one-winner rule, and the theme / quote / neither field rules. Each rule lives
+in one place (the schema) and the prompt can never drift away from it.
 
 The three example reviews are copied word for word from the export. Their
 review_ids are listed in EXAMPLE_REVIEW_IDS so check_tagging_rules.py can
@@ -17,6 +18,10 @@ from tagging_schema import (
     IMPACT_SCORE_MAX,
     IMPACT_SCORE_MIN,
     MEDIUM_THRESHOLD,
+    NEITHER_RULE,
+    QUOTE_RULE,
+    THEME_RULE,
+    WINNER_RULE,
 )
 
 # Which real review is used as the example for each category.
@@ -28,8 +33,8 @@ EXAMPLE_REVIEW_IDS = {
 
 PROMPT_TEMPLATE = """\
 You are tagging app store reviews of the Canva mobile editor (iOS and Android) \
-for a weekly product review. Read ONE review and report every product flaw or \
-feature request in it, following these rules exactly.
+for a weekly product review. Read ONE review and return ONE tag for it, \
+following these rules exactly.
 
 ## Categories
 
@@ -68,14 +73,14 @@ broken and nothing new needs building.
 or would Canva have to build something new (feature_request)?
 - Paywall: being surprised by Pro content too late is a product_flaw. Asking \
 for a Pro feature to be free, on its own, is neither.
-- One review can contain several findings. Report each one separately (for \
-example, an export failure AND text lag in the same review are two findings).
-- Use neither only when the review has no flaw and no request. If you use it, \
-it must be the only finding.
+- Use neither only when the review has no flaw and no request.
 - Judge only the review text. Do not guess facts the review does not state.
 
+## One winner
+{winner_rule}
+
 ## Impact score (for product_flaw and feature_request)
-Score how badly this finding hurts the user, from {score_min} to {score_max}:
+Score how badly the winning issue hurts the user, from {score_min} to {score_max}:
 - {critical_min} to {score_max}: the app crashes or freezes, the user loses work, \
 or the user cannot finish the task in the app at all.
 - {high_min} to {high_max}: a core task fails repeatedly or only works with a \
@@ -83,17 +88,13 @@ workaround, or a core tool is unusable.
 - {medium_min} to {medium_max}: noticeable friction (lag, confusion, surprise \
 paywall, extra manual steps), but the task still gets done.
 - {score_min} to {low_max}: minor or cosmetic, or a nice-to-have.
-Leave impact_score and theme empty for neither.
+{neither_rule}
 
 ## Theme
-A short lowercase label naming the feature and the problem or wish, such as \
-"pdf export fails", "text box lag", "pro items not marked", "brand kit on mobile". \
-Use the same wording for the same problem every time.
+{theme_rule}
 
 ## Quote
-Copy ONE sentence from the review that shows the finding, exactly as written: \
-same spelling, capitals, punctuation and spacing. Never reword, shorten, merge \
-sentences or fix typos. If you cannot copy it exactly, choose a different sentence.
+{quote_rule}
 
 ## Review to tag
 <review>
@@ -103,9 +104,13 @@ sentences or fix typos. If you cannot copy it exactly, choose a different senten
 
 
 def build_prompt(review_text: str) -> str:
-    """Fill the template for one review. Scale numbers come from tagging_schema."""
+    """Fill the template for one review. Rules and numbers come from tagging_schema."""
     return PROMPT_TEMPLATE.format(
         review_text=review_text,
+        winner_rule=WINNER_RULE,
+        theme_rule=THEME_RULE,
+        quote_rule=QUOTE_RULE,
+        neither_rule=NEITHER_RULE,
         score_min=IMPACT_SCORE_MIN,
         score_max=IMPACT_SCORE_MAX,
         critical_min=CRITICAL_THRESHOLD,
