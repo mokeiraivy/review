@@ -5,9 +5,13 @@ every review. The only slot that changes per review is {review_text}.
 PROMPT_TEMPLATE is the raw text. TAGGING_PROMPT wraps it as a LangChain
 PromptTemplate (its {name} slots are LangChain's f-string format), and is the
 object the tagging chain uses. Rules that code also enforces are NOT written in
-this text; TAGGING_PROMPT pre-fills them from tagging_schema.py: the impact scale numbers, the
-one-winner rule, and the theme / quote / neither field rules. Each rule lives
-in one place (the schema) and the prompt can never drift away from it.
+this text; TAGGING_PROMPT pre-fills them from tagging_schema.py: the
+one-winner rule and the theme / quote rules (including what the quote holds
+for neither). Each rule lives in one place (the schema) and the prompt can
+never drift away from it.
+
+The model is never asked for a severity. Severity is decided in code from the
+number of reviews that mention each theme (see tagging_schema.severity_label).
 
 The three example reviews are copied word for word from the export. Their
 review_ids are listed in EXAMPLE_REVIEW_IDS so check_tagging_rules.py can
@@ -17,12 +21,7 @@ prove each one is real.
 from langchain_core.prompts import PromptTemplate
 
 from tagging_schema import (
-    CRITICAL_THRESHOLD,
-    HIGH_THRESHOLD,
-    IMPACT_SCORE_MAX,
-    IMPACT_SCORE_MIN,
-    MEDIUM_THRESHOLD,
-    NEITHER_RULE,
+    NEITHER_QUOTE_RULE,
     QUOTE_RULE,
     THEME_RULE,
     WINNER_RULE,
@@ -83,22 +82,12 @@ for a Pro feature to be free, on its own, is neither.
 ## One winner
 {winner_rule}
 
-## Impact score (for product_flaw and feature_request)
-Score how badly the winning issue hurts the user, from {score_min} to {score_max}:
-- {critical_min} to {score_max}: the app crashes or freezes, the user loses work, \
-or the user cannot finish the task in the app at all.
-- {high_min} to {high_max}: a core task fails repeatedly or only works with a \
-workaround, or a core tool is unusable.
-- {medium_min} to {medium_max}: noticeable friction (lag, confusion, surprise \
-paywall, extra manual steps), but the task still gets done.
-- {score_min} to {low_max}: minor or cosmetic, or a nice-to-have.
-{neither_rule}
-
 ## Theme
 {theme_rule}
 
 ## Quote
 {quote_rule}
+{neither_quote_rule}
 
 ## Review to tag
 <review>
@@ -110,24 +99,17 @@ paywall, extra manual steps), but the task still gets done.
 # The LangChain template the tagging chain plugs in:
 #     chain = TAGGING_PROMPT | llm.with_structured_output(ReviewTag)
 #     chain.invoke({"review_text": text})
-# Every rule and number is pre-filled with .partial() from tagging_schema, so
+# Every rule is pre-filled with .partial() from tagging_schema, so
 # the only input variable left is review_text.
 TAGGING_PROMPT = PromptTemplate.from_template(PROMPT_TEMPLATE).partial(
-        winner_rule=WINNER_RULE,
-        theme_rule=THEME_RULE,
-        quote_rule=QUOTE_RULE,
-        neither_rule=NEITHER_RULE,
-        score_min=IMPACT_SCORE_MIN,
-        score_max=IMPACT_SCORE_MAX,
-        critical_min=CRITICAL_THRESHOLD,
-        high_min=HIGH_THRESHOLD,
-        high_max=CRITICAL_THRESHOLD - 1,
-        medium_min=MEDIUM_THRESHOLD,
-        medium_max=HIGH_THRESHOLD - 1,
-        low_max=MEDIUM_THRESHOLD - 1,
+    winner_rule=WINNER_RULE,
+    theme_rule=THEME_RULE,
+    quote_rule=QUOTE_RULE,
+    neither_quote_rule=NEITHER_QUOTE_RULE,
 )
 
 
 def build_prompt(review_text: str) -> str:
     """Render the prompt for one review, using the same TAGGING_PROMPT the chain uses."""
-    return TAGGING_PROMPT.format(review_text=review_text)
+    return TAGGING_PROMPT.format(review_text=review_text) \
+

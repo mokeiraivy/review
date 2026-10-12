@@ -61,9 +61,9 @@ chain in the next stage runs on exactly these files.
 
 | File | What it is |
 |---|---|
-| `tagging_prompt.py` | `TAGGING_PROMPT`: a LangChain `PromptTemplate` built from the fixed instruction text. Every rule and number is pre-filled from the schema, so its only input is `review_text`. The chain uses it as `TAGGING_PROMPT \| llm.with_structured_output(ReviewTag)`. |
-| `tagging_schema.py` | The output schema (Pydantic) and the severity thresholds as named constants. |
-| `check_tagging_rules.py` | Checks the rules without calling a model. |
+| `tagging_prompt.py` | `TAGGING_PROMPT`: a LangChain `PromptTemplate` built from the fixed instruction text. Every rule is pre-filled from the schema, so its only input is `review_text`. The chain uses it as `TAGGING_PROMPT \| llm.with_structured_output(ReviewTag)`. |
+| `tagging_schema.py` | The output schema (Pydantic), the severity thresholds as named constants, and `theme_summary()`, which counts mentions per theme. |
+| `check_tagging_rules.py` | Checks the rules without calling a model and saves `output/tagging_rules_check.txt`. |
 
 ## Categories (each defined in the prompt with a real review from the export)
 
@@ -73,33 +73,38 @@ chain in the next stage runs on exactly these files.
 | `feature_request` | `rv_e209f393ab`: "…I can't find my brand kit anywhere… Please add brand kit to mobile" | "Can't find" sounds like a bug, but brand kit isn't in the mobile editor. |
 | `neither` | `rv_5e547992d8`: "Really like the new editor… Only wish the background remover was on the free plan…" | Praise plus a pricing wish. Nothing is broken and nothing needs building. |
 
-## Output schema (what the model fills in: one tag per review)
+## Output schema: one tag per review
 
-`ReviewTag`: `category`, `theme`, `impact_score`, `quote` (one sentence copied exactly), and `reason`.
-`review_id` is attached in code, not by the model.
+`ReviewTag` has exactly four fields, which the model fills in: `category`, `theme`, `quote`, `reason`.
+`review_id` is attached in code. The model never gives a severity or a score, and the schema rejects them.
 
-**One winner per review.** If a review raises more than one issue, the model returns
-one tag. It picks the category that comes first in `CATEGORY_PRIORITY`
-(product_flaw, then feature_request, then neither), and within that category the
-issue with the highest impact score. The schema rejects a list or any extra field.
+- **One winner.** If a review raises more than one issue, the category that comes first in
+  `CATEGORY_PRIORITY` wins (product_flaw, then feature_request, then neither). Within that
+  category, the issue the review mentions first wins.
+- **Quote for neither.** It is still required and still copied word for word. It is the
+  sentence that shows why the review is neither (for example the praise, or the wish about
+  the free plan). That way the neither call can be checked, and every quote passes the same
+  exact-match test.
 
-**Rules written once.** `WINNER_RULE`, `THEME_RULE`, `QUOTE_RULE` and `NEITHER_RULE`
-are defined only in `tagging_schema.py`. The prompt and the field descriptions read
-them from there, so they can't disagree with the code that enforces them.
+## Severity: from mention counts, in code
 
-## Severity thresholds (in `tagging_schema.py`, never in the prompt text)
+On the dashboard card, the number next to the severity is the **mention count**: how many
+reviews raised that theme this week. So severity is worked out per theme in code, never
+per review and never by the model.
 
-The model gives an `impact_score` from `IMPACT_SCORE_MIN` to `IMPACT_SCORE_MAX`.
-Code turns it into a label:
-
-| Constant | Value | Label |
+| Constant (`tagging_schema.py`) | Value | Severity |
 |---|---|---|
-| `CRITICAL_THRESHOLD` | 9 | score ≥ 9 → critical |
-| `HIGH_THRESHOLD` | 7 | 7–8 → high |
-| `MEDIUM_THRESHOLD` | 4 | 4–6 → medium, below 4 → low |
+| `HIGH_MIN_MENTIONS` | 5 | 5 or more mentions → high |
+| `MEDIUM_MIN_MENTIONS` | 2 | 2–4 mentions → medium |
+| `LOW_MIN_MENTIONS` | 1 | 1 mention → low |
 
-The prompt text contains no digits. `TAGGING_PROMPT` inserts the scale numbers
-from these constants, so changing a threshold in code updates the prompt too.
+`theme_summary(tags)` counts tags per (category, theme) and applies `severity_label()`.
+A crash six users hit is high, and a crash one user hit is low.
+
+## Rules written once
+
+`WINNER_RULE`, `THEME_RULE`, `QUOTE_RULE` and `NEITHER_QUOTE_RULE` are defined only in
+`tagging_schema.py`. The prompt and the field descriptions read them from there.
 
 ## Check
 
@@ -107,4 +112,7 @@ from these constants, so changing a threshold in code updates the prompt too.
 python check_tagging_rules.py
 ```
 
-Expected: `26/26 checks passed`.
+Expected: `32/32 checks passed`. It also saves `output/tagging_rules_check.txt`
+with the thresholds and a worked severity example, the category examples, the
+schema fields, every check result, and the full prompt filled with a real review
+(`rv_cdf86c6e0b`), so a reviewer can read it without running anything.

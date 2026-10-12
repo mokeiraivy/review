@@ -1,14 +1,18 @@
 STAGE 2 TAGGING RULES - CHECK REPORT
-Result: 26/26 checks passed
+Result: 32/32 checks passed
 
 ==============================================================================
-1. SEVERITY THRESHOLDS (named constants in tagging_schema.py)
+1. SEVERITY (decided in code per theme from mention counts; the model never sees it)
 ==============================================================================
-  Impact score scale: IMPACT_SCORE_MIN=1 to IMPACT_SCORE_MAX=10
-  MEDIUM_THRESHOLD = 4
-  HIGH_THRESHOLD = 7
-  CRITICAL_THRESHOLD = 9
-  Score -> severity: {1: 'low', 2: 'low', 3: 'low', 4: 'medium', 5: 'medium', 6: 'medium', 7: 'high', 8: 'high', 9: 'critical', 10: 'critical'}
+  HIGH_MIN_MENTIONS = 5
+  MEDIUM_MIN_MENTIONS = 2
+  LOW_MIN_MENTIONS = 1
+  Mentions -> severity: {0: 'none', 1: 'low', 2: 'medium', 3: 'medium', 4: 'medium', 5: 'high', 6: 'high', 7: 'high'}
+  Worked example (demo tags, not this week's data):
+  feature_request  brand kit on mobile    mentions=2   severity=medium
+  product_flaw     app crashes            mentions=6   severity=high
+  product_flaw     mp4 export stuck       mentions=3   severity=medium
+  product_flaw     freezes on open        mentions=1   severity=low
 
 ==============================================================================
 2. CATEGORY EXAMPLES IN THE PROMPT (real reviews from the export)
@@ -18,13 +22,12 @@ Result: 26/26 checks passed
   neither          rv_5e547992d8  Really like the new editor, it's way faster to find templates. Only wi...
 
 ==============================================================================
-3. OUTPUT SCHEMA: ReviewTag (one tag per review; fields the model fills in)
+3. OUTPUT SCHEMA: ReviewTag (one tag per review; the fields the model fills in)
 ==============================================================================
-  category      product_flaw, feature_request, or neither, as defined in the instructions.
-  theme         A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time. For neither, leave theme and impact_score empty.
-  impact_score  How badly the winning issue hurts the user, using the impact scale in the instructions. For neither, leave theme and impact_score empty.
-  quote         Copy ONE sentence from the review that shows the winning issue, exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence.
-  reason        One short sentence explaining why this category, issue and score were chosen.
+  category  product_flaw, feature_request, or neither, as defined in the instructions.
+  theme     A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time, because reviews are counted by theme. For neither, leave theme empty.
+  quote     Copy ONE sentence from the review exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence. For product_flaw or feature_request, copy the sentence that shows the winning issue. For neither, the quote is still required and still copied exactly: copy the sentence that shows why the review is neither (for example the praise, or the wish about what the free plan includes). This lets anyone check the neither call against the review, and every quote passes the same word-for-word check.
+  reason    One short sentence explaining why this category and theme were chosen.
 
 ==============================================================================
 4. CHECK RESULTS
@@ -32,29 +35,34 @@ Result: 26/26 checks passed
 [PASS] product_flaw example rv_36484054c9 is in the export and appears verbatim in the prompt
 [PASS] feature_request example rv_e209f393ab is in the export and appears verbatim in the prompt
 [PASS] neither example rv_5e547992d8 is in the export and appears verbatim in the prompt
-[PASS] prompt template has no hard-coded numbers  - scale numbers are filled in from tagging_schema
-[PASS] three severity thresholds are named int constants in tagging_schema.py  - MEDIUM_THRESHOLD=4, HIGH_THRESHOLD=7, CRITICAL_THRESHOLD=9
-[PASS] thresholds are in order inside the score scale
-       score -> severity: {1: 'low', 2: 'low', 3: 'low', 4: 'medium', 5: 'medium', 6: 'medium', 7: 'high', 8: 'high', 9: 'critical', 10: 'critical'}
+[PASS] prompt never asks the model for a severity or score
+[PASS] prompt template has no hard-coded numbers
+[PASS] three severity thresholds are named int constants in tagging_schema.py  - HIGH_MIN_MENTIONS=5, MEDIUM_MIN_MENTIONS=2, LOW_MIN_MENTIONS=1
+[PASS] thresholds match the spec: high >= 5 mentions, medium 2-4, low 1
+[PASS] mention count -> severity follows the thresholds  - {0: 'none', 1: 'low', 2: 'medium', 3: 'medium', 4: 'medium', 5: 'high', 6: 'high', 7: 'high'}
+[PASS] severity is per theme from mention counts (six crash reviews -> high, one -> low)
+[PASS] neither tags are not counted as a theme
 [PASS] WINNER_RULE is defined once in the schema and read into the prompt
 [PASS] THEME_RULE is defined once in the schema and read into the prompt
 [PASS] QUOTE_RULE is defined once in the schema and read into the prompt
-[PASS] NEITHER_RULE is defined once in the schema and read into the prompt
+[PASS] NEITHER_QUOTE_RULE is defined once in the schema and read into the prompt
 [PASS] winner rule order comes from CATEGORY_PRIORITY  - product_flaw, then feature_request, then neither
 [PASS] field descriptions the model sees reuse the same rule text
+[PASS] model output fields are exactly category, theme, quote, reason  - ['category', 'theme', 'quote', 'reason']
 [PASS] TAGGING_PROMPT is a LangChain PromptTemplate
 [PASS] its only input variable is review_text  - ['review_text']
 [PASS] chain-style invoke gives exactly the prompt build_prompt renders
 [PASS] every slot is filled
 [PASS] rendered prompt contains the review text exactly
-[PASS] rendered prompt shows the threshold values from code
-[PASS] schema accepts one winning tag for a two-issue review  - pdf export fails -> critical
+[PASS] schema accepts one tag for a two-issue review (first-mentioned flaw wins)  - pdf export fails
 [PASS] the winning quote is a real sentence of that review
+[PASS] schema accepts a neither tag whose quote is a real sentence showing why
+[PASS] schema rejects: a severity field from the model
+[PASS] schema rejects: an impact score from the model
 [PASS] schema rejects: a list of two findings
-[PASS] schema rejects: an extra field next to the winner
-[PASS] schema rejects: neither with an impact score
-[PASS] schema rejects: flaw without an impact score
-[PASS] schema rejects: score above the scale
+[PASS] schema rejects: neither with an empty quote
+[PASS] schema rejects: neither with a theme
+[PASS] schema rejects: flaw without a theme
 [PASS] schema rejects: unknown category
 
 ==============================================================================
@@ -87,21 +95,14 @@ Why: it is praise plus a wish to change what the free plan includes. Nothing is 
 - Judge only the review text. Do not guess facts the review does not state.
 
 ## One winner
-Return exactly ONE tag per review. If the review raises more than one issue, pick the winner like this: choose the category that comes first in this order: product_flaw, then feature_request, then neither. If several issues share that category, choose the one with the highest impact score. Ignore the other issues; do not mention them in the tag.
-
-## Impact score (for product_flaw and feature_request)
-Score how badly the winning issue hurts the user, from 1 to 10:
-- 9 to 10: the app crashes or freezes, the user loses work, or the user cannot finish the task in the app at all.
-- 7 to 8: a core task fails repeatedly or only works with a workaround, or a core tool is unusable.
-- 4 to 6: noticeable friction (lag, confusion, surprise paywall, extra manual steps), but the task still gets done.
-- 1 to 3: minor or cosmetic, or a nice-to-have.
-For neither, leave theme and impact_score empty.
+Return exactly ONE tag per review. If the review raises more than one issue, pick the winner like this: choose the category that comes first in this order: product_flaw, then feature_request, then neither. If several issues share that category, choose the one the review mentions first. Ignore the other issues; do not mention them in the tag.
 
 ## Theme
-A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time.
+A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time, because reviews are counted by theme. For neither, leave theme empty.
 
 ## Quote
-Copy ONE sentence from the review that shows the winning issue, exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence.
+Copy ONE sentence from the review exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence. For product_flaw or feature_request, copy the sentence that shows the winning issue.
+For neither, the quote is still required and still copied exactly: copy the sentence that shows why the review is neither (for example the praise, or the wish about what the free plan includes). This lets anyone check the neither call against the review, and every quote passes the same word-for-word check.
 
 ## Review to tag
 <review>
