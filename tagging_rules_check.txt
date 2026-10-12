@@ -1,0 +1,112 @@
+
+STAGE 2 TAGGING RULES - CHECK REPORT
+Result: 26/26 checks passed
+
+==============================================================================
+1. SEVERITY THRESHOLDS (named constants in tagging_schema.py)
+==============================================================================
+  Impact score scale: IMPACT_SCORE_MIN=1 to IMPACT_SCORE_MAX=10
+  MEDIUM_THRESHOLD = 4
+  HIGH_THRESHOLD = 7
+  CRITICAL_THRESHOLD = 9
+  Score -> severity: {1: 'low', 2: 'low', 3: 'low', 4: 'medium', 5: 'medium', 6: 'medium', 7: 'high', 8: 'high', 9: 'critical', 10: 'critical'}
+
+==============================================================================
+2. CATEGORY EXAMPLES IN THE PROMPT (real reviews from the export)
+==============================================================================
+  product_flaw     rv_36484054c9  there's no way to tell which fonts and graphics are Pro until you try ...
+  feature_request  rv_e209f393ab  The new editor looks great but I can't find my brand kit anywhere. I h...
+  neither          rv_5e547992d8  Really like the new editor, it's way faster to find templates. Only wi...
+
+==============================================================================
+3. OUTPUT SCHEMA: ReviewTag (one tag per review; fields the model fills in)
+==============================================================================
+  category      product_flaw, feature_request, or neither, as defined in the instructions.
+  theme         A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time. For neither, leave theme and impact_score empty.
+  impact_score  How badly the winning issue hurts the user, using the impact scale in the instructions. For neither, leave theme and impact_score empty.
+  quote         Copy ONE sentence from the review that shows the winning issue, exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence.
+  reason        One short sentence explaining why this category, issue and score were chosen.
+
+==============================================================================
+4. CHECK RESULTS
+==============================================================================
+[PASS] product_flaw example rv_36484054c9 is in the export and appears verbatim in the prompt
+[PASS] feature_request example rv_e209f393ab is in the export and appears verbatim in the prompt
+[PASS] neither example rv_5e547992d8 is in the export and appears verbatim in the prompt
+[PASS] prompt template has no hard-coded numbers  - scale numbers are filled in from tagging_schema
+[PASS] three severity thresholds are named int constants in tagging_schema.py  - MEDIUM_THRESHOLD=4, HIGH_THRESHOLD=7, CRITICAL_THRESHOLD=9
+[PASS] thresholds are in order inside the score scale
+       score -> severity: {1: 'low', 2: 'low', 3: 'low', 4: 'medium', 5: 'medium', 6: 'medium', 7: 'high', 8: 'high', 9: 'critical', 10: 'critical'}
+[PASS] WINNER_RULE is defined once in the schema and read into the prompt
+[PASS] THEME_RULE is defined once in the schema and read into the prompt
+[PASS] QUOTE_RULE is defined once in the schema and read into the prompt
+[PASS] NEITHER_RULE is defined once in the schema and read into the prompt
+[PASS] winner rule order comes from CATEGORY_PRIORITY  - product_flaw, then feature_request, then neither
+[PASS] field descriptions the model sees reuse the same rule text
+[PASS] TAGGING_PROMPT is a LangChain PromptTemplate
+[PASS] its only input variable is review_text  - ['review_text']
+[PASS] chain-style invoke gives exactly the prompt build_prompt renders
+[PASS] every slot is filled
+[PASS] rendered prompt contains the review text exactly
+[PASS] rendered prompt shows the threshold values from code
+[PASS] schema accepts one winning tag for a two-issue review  - pdf export fails -> critical
+[PASS] the winning quote is a real sentence of that review
+[PASS] schema rejects: a list of two findings
+[PASS] schema rejects: an extra field next to the winner
+[PASS] schema rejects: neither with an impact score
+[PASS] schema rejects: flaw without an impact score
+[PASS] schema rejects: score above the scale
+[PASS] schema rejects: unknown category
+
+==============================================================================
+5. FILLED PROMPT FOR A REAL REVIEW (rv_cdf86c6e0b)
+   Exactly what TAGGING_PROMPT.invoke({'review_text': ...}) sends to the model.
+==============================================================================
+You are tagging app store reviews of the Canva mobile editor (iOS and Android) for a weekly product review. Read ONE review and return ONE tag for it, following these rules exactly.
+
+## Categories
+
+**product_flaw** - Something that exists in the mobile editor does not work the way a user can reasonably expect: it fails, crashes, freezes, lags, loses work, or hides information the user needs until it is too late (for example, only revealing that an element is Pro at download time). A review is still a flaw when the user also suggests a fix; judge the problem, not the suggestion.
+Example (product_flaw):
+"there's no way to tell which fonts and graphics are Pro until you try to save. I'm on free and ended up redoing my whole invite. put a crown on them or something"
+Why: it ends with a suggestion, but the core problem is that the editor hides which items are Pro until the user tries to save, and the user lost work.
+
+**feature_request** - The user wants a capability the mobile editor does not have yet, often one that exists on desktop. Nothing is broken; something new would have to be built. Wording like "can't find" or "doesn't work" can still be a request when the thing was never in the mobile editor.
+Example (feature_request):
+"The new editor looks great but I can't find my brand kit anywhere. I have to type in our hex codes by hand every time. Please add brand kit to mobile"
+Why: "can't find" sounds like a bug, but brand kit is not in the mobile editor and the user asks for it to be added.
+
+**neither** - The review has no product flaw and no feature request: praise, general comments, or wishes about pricing and which plan includes a feature (a business decision, not something the editor team builds or fixes).
+Example (neither):
+"Really like the new editor, it's way faster to find templates. Only wish the background remover was on the free plan, even a few uses a month would be nice"
+Why: it is praise plus a wish to change what the free plan includes. Nothing is broken and nothing new needs building.
+
+## Deciding rules
+- Flaw or request? Ask: would fixing a bug make this user happy (product_flaw), or would Canva have to build something new (feature_request)?
+- Paywall: being surprised by Pro content too late is a product_flaw. Asking for a Pro feature to be free, on its own, is neither.
+- Use neither only when the review has no flaw and no request.
+- Judge only the review text. Do not guess facts the review does not state.
+
+## One winner
+Return exactly ONE tag per review. If the review raises more than one issue, pick the winner like this: choose the category that comes first in this order: product_flaw, then feature_request, then neither. If several issues share that category, choose the one with the highest impact score. Ignore the other issues; do not mention them in the tag.
+
+## Impact score (for product_flaw and feature_request)
+Score how badly the winning issue hurts the user, from 1 to 10:
+- 9 to 10: the app crashes or freezes, the user loses work, or the user cannot finish the task in the app at all.
+- 7 to 8: a core task fails repeatedly or only works with a workaround, or a core tool is unusable.
+- 4 to 6: noticeable friction (lag, confusion, surprise paywall, extra manual steps), but the task still gets done.
+- 1 to 3: minor or cosmetic, or a nice-to-have.
+For neither, leave theme and impact_score empty.
+
+## Theme
+A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time.
+
+## Quote
+Copy ONE sentence from the review that shows the winning issue, exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence.
+
+## Review to tag
+<review>
+PDF export fails at the very end and the whole app is laggy when I drag text around. Uninstalling until its fixed.
+</review>
+
+==============================================================================

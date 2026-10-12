@@ -25,12 +25,16 @@ from langchain_core.prompts import PromptTemplate
 from tagging_prompt import EXAMPLE_REVIEW_IDS, PROMPT_TEMPLATE, TAGGING_PROMPT, build_prompt
 
 CLEANED = "output/cleaned_reviews.csv"
+REPORT = "output/tagging_rules_check.txt"
 results = []
+check_lines = []
 
 
 def check(name, ok, detail=""):
     results.append(ok)
-    print(f"[{'PASS' if ok else 'FAIL'}] {name}" + (f"  - {detail}" if detail else ""))
+    line = f"[{'PASS' if ok else 'FAIL'}] {name}" + (f"  - {detail}" if detail else "")
+    check_lines.append(line)
+    print(line)
 
 
 reviews = pd.read_csv(CLEANED, dtype=str).set_index("review_id")["review_text"]
@@ -55,6 +59,7 @@ check("three severity thresholds are named int constants in tagging_schema.py",
 check("thresholds are in order inside the score scale",
       S.IMPACT_SCORE_MIN < S.MEDIUM_THRESHOLD < S.HIGH_THRESHOLD < S.CRITICAL_THRESHOLD <= S.IMPACT_SCORE_MAX)
 mapping = {s: S.severity_label(s).value for s in range(S.IMPACT_SCORE_MIN, S.IMPACT_SCORE_MAX + 1)}
+check_lines.append(f"       score -> severity: {mapping}")
 print("       score -> severity:", mapping)
 
 # 4. Rules written once, in the schema
@@ -114,5 +119,54 @@ for name, data in bad_cases.items():
     except ValidationError:
         check(f"schema rejects: {name}", True)
 
-print(f"\n{sum(results)}/{len(results)} checks passed")
+summary = f"{sum(results)}/{len(results)} checks passed"
+print(f"\n{summary}")
+
+# ---------------------------------------------------------------------------
+# Saved printout: what a reviewer needs to trust the prompt without running it
+# ---------------------------------------------------------------------------
+rule = "=" * 78
+fields = {name: (p.get("type") or p.get("anyOf") or p.get("$ref"), p.get("description", ""))
+          for name, p in props.items()}
+example_lines = [f"  {cat:<16} {rid}  {reviews[rid][:70]}..." for cat, rid in EXAMPLE_REVIEW_IDS.items()]
+field_lines = [f"  {name:<13} {desc}" for name, (_, desc) in fields.items()]
+
+report = "\n".join([
+    "STAGE 2 TAGGING RULES - CHECK REPORT",
+    f"Result: {summary}",
+    "",
+    rule,
+    "1. SEVERITY THRESHOLDS (named constants in tagging_schema.py)",
+    rule,
+    f"  Impact score scale: IMPACT_SCORE_MIN={S.IMPACT_SCORE_MIN} to IMPACT_SCORE_MAX={S.IMPACT_SCORE_MAX}",
+    *(f"  {n} = {v}" for n, v in zip(names, values)),
+    f"  Score -> severity: {mapping}",
+    "",
+    rule,
+    "2. CATEGORY EXAMPLES IN THE PROMPT (real reviews from the export)",
+    rule,
+    *example_lines,
+    "",
+    rule,
+    "3. OUTPUT SCHEMA: ReviewTag (one tag per review; fields the model fills in)",
+    rule,
+    *field_lines,
+    "",
+    rule,
+    "4. CHECK RESULTS",
+    rule,
+    *check_lines,
+    "",
+    rule,
+    f"5. FILLED PROMPT FOR A REAL REVIEW ({sample_id})",
+    "   Exactly what TAGGING_PROMPT.invoke({'review_text': ...}) sends to the model.",
+    rule,
+    rendered,
+    rule,
+    "",
+])
+with open(REPORT, "w", encoding="utf-8") as f:
+    f.write(report)
+print(f"Saved report to {REPORT}")
+
 sys.exit(0 if all(results) else 1)
