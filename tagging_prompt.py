@@ -2,8 +2,10 @@
 Stage 2 prompt template: the fixed instruction sent to the language model for
 every review. The only slot that changes per review is {review_text}.
 
-Rules that code also enforces are NOT written in this text. build_prompt()
-fills them in from tagging_schema.py: the impact scale numbers, the
+PROMPT_TEMPLATE is the raw text. TAGGING_PROMPT wraps it as a LangChain
+PromptTemplate (its {name} slots are LangChain's f-string format), and is the
+object the tagging chain uses. Rules that code also enforces are NOT written in
+this text; TAGGING_PROMPT pre-fills them from tagging_schema.py: the impact scale numbers, the
 one-winner rule, and the theme / quote / neither field rules. Each rule lives
 in one place (the schema) and the prompt can never drift away from it.
 
@@ -11,6 +13,8 @@ The three example reviews are copied word for word from the export. Their
 review_ids are listed in EXAMPLE_REVIEW_IDS so check_tagging_rules.py can
 prove each one is real.
 """
+
+from langchain_core.prompts import PromptTemplate
 
 from tagging_schema import (
     CRITICAL_THRESHOLD,
@@ -103,10 +107,12 @@ paywall, extra manual steps), but the task still gets done.
 """
 
 
-def build_prompt(review_text: str) -> str:
-    """Fill the template for one review. Rules and numbers come from tagging_schema."""
-    return PROMPT_TEMPLATE.format(
-        review_text=review_text,
+# The LangChain template the tagging chain plugs in:
+#     chain = TAGGING_PROMPT | llm.with_structured_output(ReviewTag)
+#     chain.invoke({"review_text": text})
+# Every rule and number is pre-filled with .partial() from tagging_schema, so
+# the only input variable left is review_text.
+TAGGING_PROMPT = PromptTemplate.from_template(PROMPT_TEMPLATE).partial(
         winner_rule=WINNER_RULE,
         theme_rule=THEME_RULE,
         quote_rule=QUOTE_RULE,
@@ -119,4 +125,9 @@ def build_prompt(review_text: str) -> str:
         medium_min=MEDIUM_THRESHOLD,
         medium_max=HIGH_THRESHOLD - 1,
         low_max=MEDIUM_THRESHOLD - 1,
-    )
+)
+
+
+def build_prompt(review_text: str) -> str:
+    """Render the prompt for one review, using the same TAGGING_PROMPT the chain uses."""
+    return TAGGING_PROMPT.format(review_text=review_text)

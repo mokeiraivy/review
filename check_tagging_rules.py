@@ -8,7 +8,8 @@ Run:  python check_tagging_rules.py
 3. The severity thresholds are named integer constants, in order, in code.
 4. Every rule that code enforces is written once, in tagging_schema.py, and the
    prompt and field descriptions read it from there.
-5. build_prompt() fills every slot and puts the review text in.
+5. TAGGING_PROMPT is a LangChain PromptTemplate with review_text as its only
+   input, and the chain-style invoke gives the same text build_prompt() shows.
 6. The schema accepts exactly one winning tag per review and rejects invalid output.
 """
 
@@ -19,7 +20,9 @@ import pandas as pd
 from pydantic import ValidationError
 
 import tagging_schema as S
-from tagging_prompt import EXAMPLE_REVIEW_IDS, PROMPT_TEMPLATE, build_prompt
+from langchain_core.prompts import PromptTemplate
+
+from tagging_prompt import EXAMPLE_REVIEW_IDS, PROMPT_TEMPLATE, TAGGING_PROMPT, build_prompt
 
 CLEANED = "output/cleaned_reviews.csv"
 results = []
@@ -70,8 +73,13 @@ check("field descriptions the model sees reuse the same rule text",
       and S.THEME_RULE in props["theme"]["description"]
       and S.NEITHER_RULE in props["impact_score"]["description"])
 
-# 5. Prompt renders for a real review
-check("build_prompt fills every slot", "{" not in rendered and "}" not in rendered)
+# 5. The LangChain template the chain plugs in, rendered for a real review
+check("TAGGING_PROMPT is a LangChain PromptTemplate", isinstance(TAGGING_PROMPT, PromptTemplate))
+check("its only input variable is review_text", TAGGING_PROMPT.input_variables == ["review_text"],
+      str(TAGGING_PROMPT.input_variables))
+invoked = TAGGING_PROMPT.invoke({"review_text": reviews[sample_id]}).to_string()
+check("chain-style invoke gives exactly the prompt build_prompt renders", invoked == rendered)
+check("every slot is filled", "{" not in rendered and "}" not in rendered)
 check("rendered prompt contains the review text exactly", reviews[sample_id] in rendered)
 check("rendered prompt shows the threshold values from code",
       all(str(v) in rendered for v in values))

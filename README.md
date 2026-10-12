@@ -61,7 +61,7 @@ chain in the next stage runs on exactly these files.
 
 | File | What it is |
 |---|---|
-| `tagging_prompt.py` | `PROMPT_TEMPLATE`: the fixed instruction, with one slot `{review_text}`. `build_prompt()` fills it. |
+| `tagging_prompt.py` | `TAGGING_PROMPT`: a LangChain `PromptTemplate` built from the fixed instruction text. Every rule and number is pre-filled from the schema, so its only input is `review_text`. The chain uses it as `TAGGING_PROMPT \| llm.with_structured_output(ReviewTag)`. |
 | `tagging_schema.py` | The output schema (Pydantic) and the severity thresholds as named constants. |
 | `check_tagging_rules.py` | Checks the rules without calling a model. |
 
@@ -98,7 +98,7 @@ Code turns it into a label:
 | `HIGH_THRESHOLD` | 7 | 7–8 → high |
 | `MEDIUM_THRESHOLD` | 4 | 4–6 → medium, below 4 → low |
 
-The prompt text contains no digits. `build_prompt()` inserts the scale numbers
+The prompt text contains no digits. `TAGGING_PROMPT` inserts the scale numbers
 from these constants, so changing a threshold in code updates the prompt too.
 
 ## Check
@@ -107,4 +107,4 @@ from these constants, so changing a threshold in code updates the prompt too.
 python check_tagging_rules.py
 ```
 
-Expected: `23/23 checks passed`.
+Expected: `26/26 checks passed`.
