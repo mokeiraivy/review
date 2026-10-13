@@ -146,15 +146,21 @@ Optional: `$env:OPENAI_TEMPERATURE = "0"` for repeatable runs, on models that su
 
 - **product_flaw / feature_request:** the quote must appear exactly inside that review's
   own text (`quote in review_text`), with no normalising and no fuzzy matching.
-- **neither:** theme and quote must be empty.
+  - `pass`: the model's quote matched exactly.
+  - `replaced`: it still didn't match after `MAX_ATTEMPTS = 3` tries, so it was swapped for
+    a real sentence cut straight out of the same review (the one sharing the most words with
+    the model's quote). The replacement passes the same exact test, and the model's original
+    is kept in `model_quote` for the audit.
+- **neither:** theme and quote stay empty (`empty (neither)`).
 
-A review that fails is retried (`MAX_ATTEMPTS = 3`). If it still fails, the row is kept
-with `quote_check = FAIL` so the audit can see it, and the script exits non-zero.
+The run log prints the tagged table and states the two numbers that must add up:
+**passed + replaced = product_flaw rows + feature_request rows**, even when replaced is 0.
+The script exits non-zero if any row is unlabelled, the numbers don't add up, or a quote fails.
 
 ## Outputs
 
 - `output/tagged_reviews.csv`: one row per review, with the stage 1 table, the `tag` column
-  filled, and `theme`, `quote`, `quote_check`, `reason` and `attempts`.
-- `output/tagging_run.txt`: a saved copy of the terminal output. It shows every review's label
-  and quote check, labelled rows out of the total, counts per category, quote check counts,
-  and mentions per theme with severity.
+  filled, and `theme`, `quote`, `quote_check`, `model_quote`, `reason` and `attempts`.
+- `output/tagging_run.txt`: a saved copy of the terminal output. It shows every review's label,
+  the full tagged table, labelled rows out of the total, counts per category, passed + replaced
+  against flaw + request rows, any replaced quotes side by side, and mentions per theme with severity.

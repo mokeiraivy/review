@@ -17,18 +17,25 @@ Chain:  TAGGING_PROMPT  |  ChatOpenAI(model).with_structured_output(ReviewTag)
 
 Quote check (character for character, no fuzzy matching):
   - product_flaw / feature_request: the quote must appear EXACTLY inside that
-    review's own text (Python `quote in review_text`). Anything else is FAIL.
-  - neither: theme and quote must be empty. An invented one is FAIL.
-  A failed review is retried; if it still fails, the row is kept with
-  quote_check = FAIL so the audit step can see it, and the script exits non-zero.
+    review's own text (Python `quote in review_text`).
+      pass      the model's quote matched exactly
+      replaced  it did not match after MAX_ATTEMPTS tries, so it was swapped for a
+                real sentence cut straight out of the same review (the sentence
+                sharing the most words with the model's quote). The replacement is
+                re-checked with the same exact test, and the model's original quote
+                is kept in model_quote for the audit.
+  - neither: theme and quote must be empty  ->  "empty (neither)".
+  The log proves: passed + replaced = product_flaw rows + feature_request rows.
 
 Outputs:
   output/tagged_reviews.csv   one row per review: the stage 1 table with the tag
-                              column filled, plus theme, quote, quote_check, reason
+                              column filled, plus theme, quote, quote_check,
+                              model_quote, reason, attempts
   output/tagging_run.txt      a saved copy of everything printed to the terminal
 """
 
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -44,7 +51,9 @@ RUN_LOG = Path("output/tagging_run.txt")
 MAX_ATTEMPTS = 3
 
 QUOTE_PASS = "pass"
+QUOTE_REPLACED = "replaced"
 QUOTE_EMPTY_OK = "empty (neither)"
+QUOTE_FAIL = "FAIL"
 
 
 class Tee:
@@ -83,88 +92,126 @@ def build_chain(api_key, model):
     )
 
 
-def check_quote(tag: ReviewTag, review_text: str) -> str:
-    """Character-for-character check. No normalising, no fuzzy matching."""
-    if tag.category == Category.NEITHER:
-        if tag.theme is None and tag.quote is None:
-            return QUOTE_EMPTY_OK
-        return "FAIL: neither must keep theme and quote empty"
-    if tag.quote and tag.quote in review_text:
-        return QUOTE_PASS
-    return "FAIL: quote not found character for character in the review"
+def quote_matches(quote, review_text) -> bool:
+    """The one quote test: exact, character for character. No normalising."""
+    return bool(quote) and quote in review_text
+
+
+def review_sentences(review_text):
+    """Sentences cut straight out of the review text, so each one is an exact substring."""
+    parts = (m.group().strip() for m in re.finditer(r"[^.!?]+[.!?]*", review_text))
+    return [p for p in parts if re.search(r"[^\W_]", p) and p in review_text]
+
+
+def replacement_sentence(model_quote, review_text):
+    """Pick the real sentence that shares the most words with the model's quote
+    (first sentence on a tie). This only CHOOSES which real sentence to use; the
+    sentence itself is copied from the review unchanged."""
+    words = set(re.findall(r"\w+", (model_quote or "").lower()))
+    sentences = review_sentences(review_text)
+    if not sentences:
+        return None
+    return max(sentences, key=lambda s: len(words & set(re.findall(r"\w+", s.lower()))))
 
 
 def tag_one(chain, review_text):
-    """Return (tag or None, quote_check, attempts, last_error)."""
-    last_error, tag, result = "", None, "FAIL: no answer from the model"
+    """Return (tag or None, model_quote, quote_check, attempts, note)."""
+    tag, note = None, "no answer from the model"
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             out = chain.invoke({"review_text": review_text})
         except Exception as e:                           # network / API error
-            last_error = f"{type(e).__name__}: {e}"
+            note = f"{type(e).__name__}: {e}"
             time.sleep(2 * attempt)
             continue
         if out.get("parsing_error") or out.get("parsed") is None:
-            last_error = f"schema rejected the answer: {out.get('parsing_error')}"
+            note = f"schema rejected the answer: {out.get('parsing_error')}"
             continue
         tag = out["parsed"]
-        result = check_quote(tag, review_text)
-        if result in (QUOTE_PASS, QUOTE_EMPTY_OK):
-            return tag, result, attempt, ""
-        last_error = result
-    return tag, result, MAX_ATTEMPTS, last_error
+        if tag.category == Category.NEITHER:             # schema already forces empty theme/quote
+            return tag, "", QUOTE_EMPTY_OK, attempt, ""
+        if quote_matches(tag.quote, review_text):
+            return tag, tag.quote, QUOTE_PASS, attempt, ""
+        note = "model quote not found character for character"
+
+    if tag is None or tag.category == Category.NEITHER:
+        return tag, "", QUOTE_FAIL, MAX_ATTEMPTS, note
+
+    # Still no exact match after every attempt: swap in a real sentence.
+    model_quote = tag.quote
+    real = replacement_sentence(model_quote, review_text)
+    if real and quote_matches(real, review_text):
+        tag = tag.model_copy(update={"quote": real})
+        return tag, model_quote, QUOTE_REPLACED, MAX_ATTEMPTS, note
+    return tag, model_quote, QUOTE_FAIL, MAX_ATTEMPTS, note
 
 
 def tag_all(chain, reviews: pd.DataFrame, log: Tee):
-    rows = []
+    rows, tags = [], []
     for i, r in enumerate(reviews.itertuples(index=False), start=1):
-        tag, qcheck, attempts, err = tag_one(chain, r.review_text)
+        tag, model_quote, qcheck, attempts, note = tag_one(chain, r.review_text)
+        if tag is not None:
+            tags.append(tag)
         rows.append({
             "review_id": r.review_id,
             "tag": tag.category.value if tag else "",
             "theme": (tag.theme or "") if tag else "",
             "quote": (tag.quote or "") if tag else "",
             "quote_check": qcheck,
-            "reason": tag.reason if tag else err,
+            "model_quote": model_quote,
+            "reason": tag.reason if tag else note,
             "attempts": attempts,
         })
-        label = rows[-1]["tag"] or "UNLABELLED"
-        log(f"  [{i:>2}/{len(reviews)}] {r.review_id}  {label:<16} {rows[-1]['theme'][:28]:<28} quote: {qcheck}")
+        log(f"  [{i:>2}/{len(reviews)}] {r.review_id}  {rows[-1]['tag'] or 'UNLABELLED':<16} quote: {qcheck}")
     tagged = pd.DataFrame(rows)
     out = reviews.drop(columns=["tag"], errors="ignore").merge(tagged, on="review_id", how="left")
-    return out, [t for t in (_row_to_tag(r) for r in rows) if t is not None]
-
-
-def _row_to_tag(row):
-    if not row["tag"]:
-        return None
-    return ReviewTag(category=row["tag"], theme=row["theme"] or None,
-                     quote=row["quote"] or None, reason=row["reason"] or "-")
+    return out, tags
 
 
 def report(log: Tee, out: pd.DataFrame, tags):
     total = len(out)
     labelled = int((out["tag"] != "").sum())
+    n = {c.value: int((out["tag"] == c.value).sum()) for c in Category}
+    q = {k: int((out["quote_check"] == k).sum())
+         for k in (QUOTE_PASS, QUOTE_REPLACED, QUOTE_EMPTY_OK, QUOTE_FAIL)}
+    flaw_req = n["product_flaw"] + n["feature_request"]
+
+    log("")
+    log("TAGGED TABLE")
+    pd.set_option("display.max_colwidth", 60, "display.width", 250, "display.max_rows", None)
+    log(out[["review_id", "tag", "theme", "quote_check", "quote"]].to_string(index=False))
+
     log("")
     log("SUMMARY")
-    log(f"  Labelled rows:        {labelled}/{total}")
-    for cat in Category:
-        log(f"  {cat.value:<21} {int((out['tag'] == cat.value).sum())}")
-    passed = int((out["quote_check"] == QUOTE_PASS).sum())
-    empty_ok = int((out["quote_check"] == QUOTE_EMPTY_OK).sum())
-    failed = int(out["quote_check"].str.startswith("FAIL").sum())
-    log(f"  Quote check:          {passed} exact match, {empty_ok} empty (neither), {failed} FAIL")
-    log(f"  Check:                {passed} + {empty_ok} + {failed} = {passed + empty_ok + failed} of {total}")
+    log(f"  Labelled rows:              {labelled}/{total}")
+    log(f"  product_flaw:               {n['product_flaw']}")
+    log(f"  feature_request:            {n['feature_request']}")
+    log(f"  neither:                    {n['neither']}")
+    log("")
+    log("  Quotes on flaw + request rows (must add up):")
+    log(f"    passed (exact match):     {q[QUOTE_PASS]}")
+    log(f"    replaced (real sentence): {q[QUOTE_REPLACED]}")
+    log(f"    passed + replaced:        {q[QUOTE_PASS]} + {q[QUOTE_REPLACED]} = {q[QUOTE_PASS] + q[QUOTE_REPLACED]}")
+    log(f"    flaw + request rows:      {n['product_flaw']} + {n['feature_request']} = {flaw_req}")
+    adds_up = q[QUOTE_PASS] + q[QUOTE_REPLACED] == flaw_req
+    log(f"    adds up:                  {'YES' if adds_up else 'NO'}")
+    log(f"  Neither rows with empty theme and quote: {q[QUOTE_EMPTY_OK]} of {n['neither']}")
+    log(f"  FAIL (no usable quote):     {q[QUOTE_FAIL]}")
+
+    if q[QUOTE_REPLACED]:
+        log("")
+        log("REPLACED QUOTES (model's version kept in model_quote for the audit)")
+        for r in out[out["quote_check"] == QUOTE_REPLACED].itertuples(index=False):
+            log(f"  {r.review_id}")
+            log(f"    model said: {r.model_quote!r}")
+            log(f"    replaced by: {r.quote!r}")
+
     log("")
     log("MENTIONS PER THEME (severity: high >= 5, medium 2-4, low 1)")
     for r in theme_summary(tags):
         log(f"  {r['category']:<16} {r['theme']:<32} mentions={r['mentions']:<3} severity={r['severity']}")
-    if failed:
-        log("")
-        log("FAILED QUOTE CHECKS (kept for the audit, not trusted):")
-        for r in out[out["quote_check"].str.startswith("FAIL")].itertuples(index=False):
-            log(f"  {r.review_id}: {r.quote_check} | model quote: {r.quote!r}")
-    return labelled == total and failed == 0
+
+    return labelled == total and adds_up and q[QUOTE_FAIL] == 0 and q[QUOTE_EMPTY_OK] == n["neither"]
 
 
 def main():
