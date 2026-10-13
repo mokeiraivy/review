@@ -1,5 +1,5 @@
 STAGE 2 TAGGING RULES - CHECK REPORT
-Result: 32/32 checks passed
+Result: 33/33 checks passed
 
 ==============================================================================
 1. SEVERITY (decided in code per theme from mention counts; the model never sees it)
@@ -26,7 +26,7 @@ Result: 32/32 checks passed
 ==============================================================================
   category  product_flaw, feature_request, or neither, as defined in the instructions.
   theme     A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time, because reviews are counted by theme. For neither, leave theme empty.
-  quote     Copy ONE sentence from the review exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence. For product_flaw or feature_request, copy the sentence that shows the winning issue. For neither, the quote is still required and still copied exactly: copy the sentence that shows why the review is neither (for example the praise, or the wish about what the free plan includes). This lets anyone check the neither call against the review, and every quote passes the same word-for-word check.
+  quote     Copy ONE sentence from the review exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence. For product_flaw or feature_request, copy the sentence that shows the winning issue. For neither, leave quote empty. Do not copy or invent a sentence: a neither review has no flaw or request to quote, and it never appears on a dashboard card.
   reason    One short sentence explaining why this category and theme were chosen.
 
 ==============================================================================
@@ -56,13 +56,14 @@ Result: 32/32 checks passed
 [PASS] rendered prompt contains the review text exactly
 [PASS] schema accepts one tag for a two-issue review (first-mentioned flaw wins)  - pdf export fails
 [PASS] the winning quote is a real sentence of that review
-[PASS] schema accepts a neither tag whose quote is a real sentence showing why
+[PASS] schema accepts a neither tag with empty theme and quote
 [PASS] schema rejects: a severity field from the model
 [PASS] schema rejects: an impact score from the model
 [PASS] schema rejects: a list of two findings
-[PASS] schema rejects: neither with an empty quote
-[PASS] schema rejects: neither with a theme
+[PASS] schema rejects: neither with an invented quote
+[PASS] schema rejects: neither with an invented theme
 [PASS] schema rejects: flaw without a theme
+[PASS] schema rejects: flaw without a quote
 [PASS] schema rejects: unknown category
 
 ==============================================================================
@@ -102,7 +103,7 @@ A short lowercase label naming the feature and the problem or wish, such as 'pdf
 
 ## Quote
 Copy ONE sentence from the review exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence. For product_flaw or feature_request, copy the sentence that shows the winning issue.
-For neither, the quote is still required and still copied exactly: copy the sentence that shows why the review is neither (for example the praise, or the wish about what the free plan includes). This lets anyone check the neither call against the review, and every quote passes the same word-for-word check.
+For neither, leave quote empty. Do not copy or invent a sentence: a neither review has no flaw or request to quote, and it never appears on a dashboard card.
 
 ## Review to tag
 <review>

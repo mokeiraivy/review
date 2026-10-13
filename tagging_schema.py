@@ -93,10 +93,8 @@ QUOTE_RULE = (
     "For product_flaw or feature_request, copy the sentence that shows the winning issue."
 )
 NEITHER_QUOTE_RULE = (
-    "For neither, the quote is still required and still copied exactly: copy the sentence "
-    "that shows why the review is neither (for example the praise, or the wish about what "
-    "the free plan includes). This lets anyone check the neither call against the review, "
-    "and every quote passes the same word-for-word check."
+    "For neither, leave quote empty. Do not copy or invent a sentence: a neither review "
+    "has no flaw or request to quote, and it never appears on a dashboard card."
 )
 REASON_RULE = "One short sentence explaining why this category and theme were chosen."
 
@@ -110,18 +108,22 @@ class ReviewTag(BaseModel):
         description="product_flaw, feature_request, or neither, as defined in the instructions."
     )
     theme: Optional[str] = Field(default=None, description=THEME_RULE)
-    quote: str = Field(description=f"{QUOTE_RULE} {NEITHER_QUOTE_RULE}")
+    quote: Optional[str] = Field(default=None, description=f"{QUOTE_RULE} {NEITHER_QUOTE_RULE}")
     reason: str = Field(description=REASON_RULE)
 
     @model_validator(mode="after")
     def check_fields_match_category(self):
         if self.category == Category.NEITHER:
-            if self.theme:
-                raise ValueError("A neither tag must not have a theme")
-        elif not self.theme or not self.theme.strip():
-            raise ValueError(f"A {self.category.value} tag needs a theme")
-        if not self.quote.strip():
-            raise ValueError("quote must not be empty, including for neither")
+            if (self.theme or "").strip():
+                raise ValueError("A neither tag must keep theme empty, not invent one")
+            if (self.quote or "").strip():
+                raise ValueError("A neither tag must keep quote empty, not invent one")
+            self.theme, self.quote = None, None
+        else:
+            if not (self.theme or "").strip():
+                raise ValueError(f"A {self.category.value} tag needs a theme")
+            if not (self.quote or "").strip():
+                raise ValueError(f"A {self.category.value} tag needs a quote")
         return self
 
 

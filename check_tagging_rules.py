@@ -11,8 +11,8 @@ Run:  python check_tagging_rules.py
 4. Every rule the code enforces is written once, in tagging_schema.py, and the
    prompt and field descriptions read it from there.
 5. TAGGING_PROMPT is a LangChain PromptTemplate with review_text as its only input.
-6. The schema accepts one tag per review (no severity, no score) and defines the
-   quote for neither reviews.
+6. The schema accepts one tag per review (no severity, no score), and neither
+   tags keep an empty theme and quote.
 """
 
 import re
@@ -77,7 +77,7 @@ demo_tags = ([tag("product_flaw", "app crashes")] * 6
              + [tag("product_flaw", "freezes on open")]
              + [tag("product_flaw", "mp4 export stuck")] * 3
              + [tag("feature_request", "brand kit on mobile")] * 2
-             + [tag("neither", None)] * 4)
+             + [tag("neither", None, quote=None)] * 4)
 summary = S.theme_summary(demo_tags)
 by_theme = {r["theme"]: r for r in summary}
 check("severity is per theme from mention counts (six crash reviews -> high, one -> low)",
@@ -122,24 +122,22 @@ try:
 except ValidationError as e:
     check("schema accepts one tag for a two-issue review (first-mentioned flaw wins)", False, str(e))
 
-neither_id = EXAMPLE_REVIEW_IDS["neither"]
-neither_quote = ("Only wish the background remover was on the free plan, "
-                 "even a few uses a month would be nice")
 try:
-    n = S.ReviewTag.model_validate({"category": "neither", "quote": neither_quote,
+    n = S.ReviewTag.model_validate({"category": "neither", "theme": "", "quote": "",
                                     "reason": "Praise plus a wish about the free plan."})
-    check("schema accepts a neither tag whose quote is a real sentence showing why",
-          n.quote in reviews[neither_id])
+    check("schema accepts a neither tag with empty theme and quote",
+          n.theme is None and n.quote is None)
 except ValidationError as e:
-    check("schema accepts a neither tag whose quote is a real sentence showing why", False, str(e))
+    check("schema accepts a neither tag with empty theme and quote", False, str(e))
 
 bad_cases = {
     "a severity field from the model": {**winner, "severity": "high"},
     "an impact score from the model": {**winner, "impact_score": 9},
     "a list of two findings": {"findings": [winner, winner]},
-    "neither with an empty quote": {"category": "neither", "quote": "  ", "reason": "x"},
-    "neither with a theme": {"category": "neither", "theme": "pricing", "quote": "x", "reason": "x"},
+    "neither with an invented quote": {"category": "neither", "quote": "Love it", "reason": "x"},
+    "neither with an invented theme": {"category": "neither", "theme": "pricing", "reason": "x"},
     "flaw without a theme": {"category": "product_flaw", "quote": "x", "reason": "x"},
+    "flaw without a quote": {"category": "product_flaw", "theme": "crash", "reason": "x"},
     "unknown category": {**winner, "category": "bug"},
 }
 for name, data in bad_cases.items():

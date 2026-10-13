@@ -81,10 +81,8 @@ chain in the next stage runs on exactly these files.
 - **One winner.** If a review raises more than one issue, the category that comes first in
   `CATEGORY_PRIORITY` wins (product_flaw, then feature_request, then neither). Within that
   category, the issue the review mentions first wins.
-- **Quote for neither.** It is still required and still copied word for word. It is the
-  sentence that shows why the review is neither (for example the praise, or the wish about
-  the free plan). That way the neither call can be checked, and every quote passes the same
-  exact-match test.
+- **Neither keeps theme and quote empty.** The model must not copy or invent a sentence
+  for a neither review, and the schema rejects one if it does.
 
 ## Severity: from mention counts, in code
 
@@ -112,7 +110,51 @@ A crash six users hit is high, and a crash one user hit is low.
 python check_tagging_rules.py
 ```
 
-Expected: `32/32 checks passed`. It also saves `output/tagging_rules_check.txt`
+Expected: `33/33 checks passed`. It also saves `output/tagging_rules_check.txt`
 with the thresholds and a worked severity example, the category examples, the
 schema fields, every check result, and the full prompt filled with a real review
 (`rv_cdf86c6e0b`), so a reviewer can read it without running anything.
+
+---
+
+# Stage 3: Tagging chain (LangChain + OpenAI)
+
+`tag_reviews.py` sends every cleaned review to the OpenAI model and reads back one
+`ReviewTag` per review:
+
+```
+TAGGING_PROMPT | ChatOpenAI(model).with_structured_output(ReviewTag)
+```
+
+The prompt and schema are the stage 2 rules, unchanged. `review_id` is attached in code.
+
+## Run
+
+The model ID and API key come **only** from environment variables. They are never
+written in the code, and the run log shows the model ID but never the key.
+
+```powershell
+pip install -r requirements.txt
+$env:OPENAI_API_KEY = "sk-..."
+$env:OPENAI_MODEL   = "<model id>"
+python tag_reviews.py
+```
+
+Optional: `$env:OPENAI_TEMPERATURE = "0"` for repeatable runs, on models that support it.
+
+## Quote check: character for character
+
+- **product_flaw / feature_request:** the quote must appear exactly inside that review's
+  own text (`quote in review_text`), with no normalising and no fuzzy matching.
+- **neither:** theme and quote must be empty.
+
+A review that fails is retried (`MAX_ATTEMPTS = 3`). If it still fails, the row is kept
+with `quote_check = FAIL` so the audit can see it, and the script exits non-zero.
+
+## Outputs
+
+- `output/tagged_reviews.csv`: one row per review, with the stage 1 table, the `tag` column
+  filled, and `theme`, `quote`, `quote_check`, `reason` and `attempts`.
+- `output/tagging_run.txt`: a saved copy of the terminal output. It shows every review's label
+  and quote check, labelled rows out of the total, counts per category, quote check counts,
+  and mentions per theme with severity.
