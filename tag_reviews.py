@@ -1,4 +1,4 @@
-"""
+""""
 Stage 3: tag every cleaned review with the OpenAI model through a LangChain chain.
 
 Run (from the repo root, after setting the two environment variables):
@@ -6,6 +6,10 @@ Run (from the repo root, after setting the two environment variables):
                  $env:OPENAI_MODEL   = "<model id>"
                  python tag_reviews.py
     bash:        OPENAI_API_KEY=sk-... OPENAI_MODEL=<model id> python tag_reviews.py
+
+For OpenRouter (OpenAI-compatible), also set:
+    $env:OPENAI_BASE_URL = "https://openrouter.ai/api/v1"
+and use an OpenRouter key and an OpenRouter model ID (e.g. "provider/model-name").
 
 The model ID and API key are read ONLY from those environment variables. Neither
 is written anywhere in the code or the saved output (the run log shows the model
@@ -80,10 +84,17 @@ def read_settings():
     return api_key, model
 
 
+def base_url():
+    """Optional OpenAI-compatible endpoint (e.g. OpenRouter). Read from env, never hard-coded."""
+    return os.environ.get("OPENAI_BASE_URL", "").strip() or None
+
+
 def build_chain(api_key, model):
     from langchain_openai import ChatOpenAI
 
     llm_kwargs = {"model": model, "api_key": api_key}
+    if base_url():                                       # e.g. OpenRouter: https://openrouter.ai/api/v1
+        llm_kwargs["base_url"] = base_url()
     if os.environ.get("OPENAI_TEMPERATURE"):           # optional, e.g. "0" for repeatable runs
         llm_kwargs["temperature"] = float(os.environ["OPENAI_TEMPERATURE"])
     llm = ChatOpenAI(**llm_kwargs)
@@ -163,6 +174,10 @@ def tag_all(chain, reviews: pd.DataFrame, log: Tee):
             "attempts": attempts,
         })
         log(f"  [{i:>2}/{len(reviews)}] {r.review_id}  {rows[-1]['tag'] or 'UNLABELLED':<16} quote: {qcheck}")
+        if tag is None:
+            log(f"         error: {note[:300]}")
+            if i == 1:
+                log("         First review failed with no answer. Check the key, OPENAI_BASE_URL and model ID.")
     tagged = pd.DataFrame(rows)
     out = reviews.drop(columns=["tag"], errors="ignore").merge(tagged, on="review_id", how="left")
     return out, tags
@@ -221,6 +236,7 @@ def main():
     log = Tee()
     log("STAGE 3 - TAGGING RUN")
     log(f"Model:   {model}  (from OPENAI_MODEL; API key read from OPENAI_API_KEY, not shown)")
+    log(f"Endpoint: {base_url() or 'OpenAI default'}  (from OPENAI_BASE_URL)")
     log(f"Input:   {CLEANED}  ({len(reviews)} reviews, review_text column)")
     log("")
     chain = build_chain(api_key, model)

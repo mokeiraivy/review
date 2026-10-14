@@ -1,55 +1,76 @@
 STAGE 3 - TAGGING RUN
-Model:   your model id here  (from OPENAI_MODEL; API key read from OPENAI_API_KEY, not shown)
+Model:   nvidia/nemotron-3-super-120b-a12b:free  (from OPENAI_MODEL; API key read from OPENAI_API_KEY, not shown)
+Endpoint: https://openrouter.ai/api/v1  (from OPENAI_BASE_URL)
 Input:   output\cleaned_reviews.csv  (18 reviews, review_text column)
 
-  [ 1/18] rv_cbe4c75fba  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 2/18] rv_e5da5d4c58  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 3/18] rv_b4b6fd5646  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 4/18] rv_b1f196379e  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 5/18] rv_2626e4c6db  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 6/18] rv_e1e73fa600  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 7/18] rv_aba4ca6b7b  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 8/18] rv_0adbf47db0  UNLABELLED                                    quote: FAIL: no answer from the model
-  [ 9/18] rv_e209f393ab  UNLABELLED                                    quote: FAIL: no answer from the model
-  [10/18] rv_76433a6ce6  UNLABELLED                                    quote: FAIL: no answer from the model
-  [11/18] rv_36484054c9  UNLABELLED                                    quote: FAIL: no answer from the model
-  [12/18] rv_cdf86c6e0b  UNLABELLED                                    quote: FAIL: no answer from the model
-  [13/18] rv_49906f6ab7  UNLABELLED                                    quote: FAIL: no answer from the model
-  [14/18] rv_742b5bf9a0  UNLABELLED                                    quote: FAIL: no answer from the model
-  [15/18] rv_5e547992d8  UNLABELLED                                    quote: FAIL: no answer from the model
-  [16/18] rv_b8f9550896  UNLABELLED                                    quote: FAIL: no answer from the model
-  [17/18] rv_4e1bf0fa7c  UNLABELLED                                    quote: FAIL: no answer from the model
-  [18/18] rv_6866864537  UNLABELLED                                    quote: FAIL: no answer from the model
+  [ 1/18] rv_cbe4c75fba  product_flaw     quote: pass
+  [ 2/18] rv_e5da5d4c58  product_flaw     quote: pass
+  [ 3/18] rv_b4b6fd5646  feature_request  quote: pass
+  [ 4/18] rv_b1f196379e  product_flaw     quote: pass
+  [ 5/18] rv_2626e4c6db  feature_request  quote: pass
+  [ 6/18] rv_e1e73fa600  product_flaw     quote: pass
+  [ 7/18] rv_aba4ca6b7b  product_flaw     quote: pass
+  [ 8/18] rv_0adbf47db0  product_flaw     quote: pass
+  [ 9/18] rv_e209f393ab  feature_request  quote: pass
+  [10/18] rv_76433a6ce6  product_flaw     quote: pass
+  [11/18] rv_36484054c9  product_flaw     quote: pass
+  [12/18] rv_cdf86c6e0b  product_flaw     quote: pass
+  [13/18] rv_49906f6ab7  product_flaw     quote: pass
+  [14/18] rv_742b5bf9a0  product_flaw     quote: pass
+  [15/18] rv_5e547992d8  neither          quote: empty (neither)
+  [16/18] rv_b8f9550896  product_flaw     quote: pass
+  [17/18] rv_4e1bf0fa7c  product_flaw     quote: pass
+  [18/18] rv_6866864537  product_flaw     quote: pass
+
+TAGGED TABLE
+    review_id             tag                                     theme     quote_check                                                                                                              quote
+rv_cbe4c75fba    product_flaw                              text box lag            pass                                            Every time I move a text box it jumps around and lags behind my finger.
+rv_e5da5d4c58    product_flaw                     crash on template tap            pass                                                            opens fine then crashes the second I tap on a template.
+rv_b4b6fd5646 feature_request            keyboard shortcuts not working            pass                    Love having the new editor on my iPad but I use a keyboard case and none of the shortcuts work.
+rv_b1f196379e    product_flaw                          pdf export fails            pass              Tried to export my flyer as a PDF three times and it just sits at 99% then says something went wrong.
+rv_2626e4c6db feature_request                    layers panel on mobile            pass                                                                        Please bring the layers panel from desktop.
+rv_e1e73fa600    product_flaw                      pro items not marked            pass                 I spent 20 minutes on a poster and only when I hit download it told me half the elements were Pro.
+rv_aba4ca6b7b    product_flaw                   mp4 export stuck at 99%            pass                                                                    MP4 export gets stuck at 99% every single time.
+rv_0adbf47db0    product_flaw             app closes when adding photos            pass                      Since updating the app closes itself whenever I add more than a couple of photos to a design.
+rv_e209f393ab feature_request                       brand kit on mobile            pass                                                                                     Please add brand kit to mobile
+rv_76433a6ce6    product_flaw                              text box lag            pass                                 Typing in a text box has like a one second delay on every letter since the update.
+rv_36484054c9    product_flaw                      pro items not marked            pass                                     there's no way to tell which fonts and graphics are Pro until you try to save.
+rv_cdf86c6e0b    product_flaw                          pdf export fails            pass                               PDF export fails at the very end and the whole app is laggy when I drag text around.
+rv_49906f6ab7    product_flaw freezes and crashes on text-heavy designs            pass                            freezes for a few seconds whenever I open a design with a lot of text and then crashes.
+rv_742b5bf9a0    product_flaw                              text box lag            pass                                 i type a word and it shows up a second later, and moving the box around is choppy.
+rv_5e547992d8         neither                                           empty (neither)                                                                                                                   
+rv_b8f9550896    product_flaw                      pro items not marked            pass                             Designed a whole flyer then got told I need Pro to download it because of one sticker.
+rv_4e1bf0fa7c    product_flaw                         mp4 export stalls            pass                                                    Exporting my slideshow as MP4 stalls at 99% and never finishes.
+rv_6866864537    product_flaw         background remover not marked pro            pass I used background remover in the editor thinking it was free and only found out it's Pro when I tried to download.
 
 SUMMARY
-  Labelled rows:        0/18
-  product_flaw          0
-  feature_request       0
-  neither               0
-  Quote check:          0 exact match, 0 empty (neither), 18 FAIL
-  Check:                0 + 0 + 18 = 18 of 18
+  Labelled rows:              18/18
+  product_flaw:               14
+  feature_request:            3
+  neither:                    1
+
+  Quotes on flaw + request rows (must add up):
+    passed (exact match):     17
+    replaced (real sentence): 0
+    passed + replaced:        17 + 0 = 17
+    flaw + request rows:      14 + 3 = 17
+    adds up:                  YES
+  Neither rows with empty theme and quote: 1 of 1
+  FAIL (no usable quote):     0
 
 MENTIONS PER THEME (severity: high >= 5, medium 2-4, low 1)
-
-FAILED QUOTE CHECKS (kept for the audit, not trusted):
-  rv_cbe4c75fba: FAIL: no answer from the model | model quote: ''
-  rv_e5da5d4c58: FAIL: no answer from the model | model quote: ''
-  rv_b4b6fd5646: FAIL: no answer from the model | model quote: ''
-  rv_b1f196379e: FAIL: no answer from the model | model quote: ''
-  rv_2626e4c6db: FAIL: no answer from the model | model quote: ''
-  rv_e1e73fa600: FAIL: no answer from the model | model quote: ''
-  rv_aba4ca6b7b: FAIL: no answer from the model | model quote: ''
-  rv_0adbf47db0: FAIL: no answer from the model | model quote: ''
-  rv_e209f393ab: FAIL: no answer from the model | model quote: ''
-  rv_76433a6ce6: FAIL: no answer from the model | model quote: ''
-  rv_36484054c9: FAIL: no answer from the model | model quote: ''
-  rv_cdf86c6e0b: FAIL: no answer from the model | model quote: ''
-  rv_49906f6ab7: FAIL: no answer from the model | model quote: ''
-  rv_742b5bf9a0: FAIL: no answer from the model | model quote: ''
-  rv_5e547992d8: FAIL: no answer from the model | model quote: ''
-  rv_b8f9550896: FAIL: no answer from the model | model quote: ''
-  rv_4e1bf0fa7c: FAIL: no answer from the model | model quote: ''
-  rv_6866864537: FAIL: no answer from the model | model quote: ''
+  feature_request  brand kit on mobile              mentions=1   severity=low
+  feature_request  keyboard shortcuts not working   mentions=1   severity=low
+  feature_request  layers panel on mobile           mentions=1   severity=low
+  product_flaw     pro items not marked             mentions=3   severity=medium
+  product_flaw     text box lag                     mentions=3   severity=medium
+  product_flaw     pdf export fails                 mentions=2   severity=medium
+  product_flaw     app closes when adding photos    mentions=1   severity=low
+  product_flaw     background remover not marked pro mentions=1   severity=low
+  product_flaw     crash on template tap            mentions=1   severity=low
+  product_flaw     freezes and crashes on text-heavy designs mentions=1   severity=low
+  product_flaw     mp4 export stalls                mentions=1   severity=low
+  product_flaw     mp4 export stuck at 99%          mentions=1   severity=low
 
 Saved tag table to output\tagged_reviews.csv
 Saved this output to output\tagging_run.txt
