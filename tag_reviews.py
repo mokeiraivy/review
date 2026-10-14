@@ -1,4 +1,4 @@
-""""
+"""
 Stage 3: tag every cleaned review with the OpenAI model through a LangChain chain.
 
 Run (from the repo root, after setting the two environment variables):
@@ -24,8 +24,8 @@ Quote check (character for character, no fuzzy matching):
     review's own text (Python `quote in review_text`).
       pass      the model's quote matched exactly
       replaced  it did not match after MAX_ATTEMPTS tries, so it was swapped for a
-                real sentence cut straight out of the same review (the sentence
-                sharing the most words with the model's quote). The replacement is
+                the review's FIRST FULL SENTENCE, cut straight out of the same
+                review. The replacement is
                 re-checked with the same exact test, and the model's original quote
                 is kept in model_quote for the audit.
   - neither: theme and quote must be empty  ->  "empty (neither)".
@@ -52,7 +52,10 @@ from tagging_schema import Category, ReviewTag, theme_summary
 CLEANED = Path("output/cleaned_reviews.csv")
 TAGS_OUT = Path("output/tagged_reviews.csv")
 RUN_LOG = Path("output/tagging_run.txt")
-MAX_ATTEMPTS = 3
+MAX_ATTEMPTS = 3            # tries per review when the answer is wrong (schema / quote)
+RATE_LIMIT_WAITS = (15, 30, 60, 60, 90, 120)   # seconds to wait on each 429 before giving up
+# Pause between reviews (seconds). Free models are rate-limited; override with REQUEST_DELAY.
+REQUEST_DELAY = float(os.environ.get("REQUEST_DELAY", "4"))
 
 QUOTE_PASS = "pass"
 QUOTE_REPLACED = "replaced"
@@ -114,25 +117,39 @@ def review_sentences(review_text):
     return [p for p in parts if re.search(r"[^\W_]", p) and p in review_text]
 
 
-def replacement_sentence(model_quote, review_text):
-    """Pick the real sentence that shares the most words with the model's quote
-    (first sentence on a tie). This only CHOOSES which real sentence to use; the
-    sentence itself is copied from the review unchanged."""
-    words = set(re.findall(r"\w+", (model_quote or "").lower()))
+def replacement_sentence(review_text):
+    """The review's first full sentence, copied from the review unchanged.
+    Fixed rule: no judgement about which sentence fits best, so anyone auditing
+    a replaced row can predict exactly what the replacement will be."""
     sentences = review_sentences(review_text)
-    if not sentences:
-        return None
-    return max(sentences, key=lambda s: len(words & set(re.findall(r"\w+", s.lower()))))
+    return sentences[0] if sentences else None
 
 
-def tag_one(chain, review_text):
+def is_rate_limit(e) -> bool:
+    return "429" in str(e) or "RateLimit" in type(e).__name__ or "rate-limit" in str(e).lower()
+
+
+def invoke_with_backoff(chain, review_text, log):
+    """Call the chain. On a 429 rate limit, wait and retry (these waits do not use up
+    MAX_ATTEMPTS). Other errors are returned to the caller."""
+    for wait in (*RATE_LIMIT_WAITS, None):
+        try:
+            return chain.invoke({"review_text": review_text}), None
+        except Exception as e:
+            if wait is None or not is_rate_limit(e):
+                return None, f"{type(e).__name__}: {e}"
+            if log:
+                log(f"         rate-limited, waiting {wait}s and retrying...")
+            time.sleep(wait)
+
+
+def tag_one(chain, review_text, log=None):
     """Return (tag or None, model_quote, quote_check, attempts, note)."""
     tag, note = None, "no answer from the model"
     for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            out = chain.invoke({"review_text": review_text})
-        except Exception as e:                           # network / API error
-            note = f"{type(e).__name__}: {e}"
+        out, err = invoke_with_backoff(chain, review_text, log)
+        if err:
+            note = err
             time.sleep(2 * attempt)
             continue
         if out.get("parsing_error") or out.get("parsed") is None:
@@ -150,7 +167,7 @@ def tag_one(chain, review_text):
 
     # Still no exact match after every attempt: swap in a real sentence.
     model_quote = tag.quote
-    real = replacement_sentence(model_quote, review_text)
+    real = replacement_sentence(review_text)
     if real and quote_matches(real, review_text):
         tag = tag.model_copy(update={"quote": real})
         return tag, model_quote, QUOTE_REPLACED, MAX_ATTEMPTS, note
@@ -160,7 +177,9 @@ def tag_one(chain, review_text):
 def tag_all(chain, reviews: pd.DataFrame, log: Tee):
     rows, tags = [], []
     for i, r in enumerate(reviews.itertuples(index=False), start=1):
-        tag, model_quote, qcheck, attempts, note = tag_one(chain, r.review_text)
+        if i > 1 and REQUEST_DELAY:
+            time.sleep(REQUEST_DELAY)
+        tag, model_quote, qcheck, attempts, note = tag_one(chain, r.review_text, log)
         if tag is not None:
             tags.append(tag)
         rows.append({

@@ -148,14 +148,17 @@ Optional: `$env:OPENAI_TEMPERATURE = "0"` for repeatable runs, on models that su
   own text (`quote in review_text`), with no normalising and no fuzzy matching.
   - `pass`: the model's quote matched exactly.
   - `replaced`: it still didn't match after `MAX_ATTEMPTS = 3` tries, so it was swapped for
-    a real sentence cut straight out of the same review (the one sharing the most words with
-    the model's quote). The replacement passes the same exact test, and the model's original
+    the review's **first full sentence**, cut straight out of the same review. The replacement passes the same exact test, and the model's original
     is kept in `model_quote` for the audit.
 - **neither:** theme and quote stay empty (`empty (neither)`).
 
 The run log prints the tagged table and states the two numbers that must add up:
 **passed + replaced = product_flaw rows + feature_request rows**, even when replaced is 0.
 The script exits non-zero if any row is unlabelled, the numbers don't add up, or a quote fails.
+
+`python test_replacement.py` forces this branch offline, using a fake model that rewords one
+quote. It checks that the row is marked `replaced`, gets the first full sentence word for word,
+and keeps the model's version in `model_quote`.
 
 ## Outputs
 
