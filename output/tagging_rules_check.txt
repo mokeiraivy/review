@@ -1,5 +1,5 @@
 STAGE 2 TAGGING RULES - CHECK REPORT
-Result: 33/33 checks passed
+Result: 39/39 checks passed
 
 ==============================================================================
 1. SEVERITY (decided in code per theme from mention counts; the model never sees it)
@@ -11,8 +11,8 @@ Result: 33/33 checks passed
   Worked example (demo tags, not this week's data):
   feature_request  brand kit on mobile    mentions=2   severity=medium
   product_flaw     app crashes            mentions=6   severity=high
-  product_flaw     mp4 export stuck       mentions=3   severity=medium
-  product_flaw     freezes on open        mentions=1   severity=low
+  product_flaw     mp4 export stuck at 99% mentions=3   severity=medium
+  product_flaw     text box lag           mentions=1   severity=low
 
 ==============================================================================
 2. CATEGORY EXAMPLES IN THE PROMPT (real reviews from the export)
@@ -25,7 +25,19 @@ Result: 33/33 checks passed
 3. OUTPUT SCHEMA: ReviewTag (one tag per review; the fields the model fills in)
 ==============================================================================
   category  product_flaw, feature_request, or neither, as defined in the instructions.
-  theme     A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time, because reviews are counted by theme. For neither, leave theme empty.
+  theme     Pick the theme from this fixed list, copied exactly. Name the problem, not what triggered it, and use the same theme for the same problem even if the review words it differently. A feature_request theme names the wish, never a fault. Use 'other flaw' or 'other request' only when nothing in the list fits. For neither, leave theme empty.
+For product_flaw, use one of:
+- 'app crashes': the app closes itself, or freezes and then closes, whatever triggered it (opening a template, adding photos, opening a large design)
+- 'text box lag': typing in or moving a text box is slow, delayed, jumpy or choppy
+- 'pdf export fails': PDF export does not complete: it errors or stops near the end. Slow but finishing is NOT this theme (use other flaw)
+- 'mp4 export stuck at 99%': MP4 / video export stalls or stops at 99% and never finishes
+- 'pro items not marked': the user only learns that an element, font, sticker or tool is Pro when saving or downloading
+- 'other flaw': a flaw that fits none of the themes above
+For feature_request, use one of:
+- 'keyboard shortcuts on ipad': wants keyboard shortcuts to work with a keyboard on iPad
+- 'layers panel on mobile': wants the desktop layers panel in the mobile editor
+- 'brand kit on mobile': wants brand kit (saved brand colours, fonts) in the mobile editor
+- 'other request': a request that fits none of the themes above
   quote     Copy ONE sentence from the review exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence. For product_flaw or feature_request, copy the sentence that shows the winning issue. For neither, leave quote empty. Do not copy or invent a sentence: a neither review has no flaw or request to quote, and it never appears on a dashboard card.
   reason    One short sentence explaining why this category and theme were chosen.
 
@@ -37,11 +49,15 @@ Result: 33/33 checks passed
 [PASS] neither example rv_5e547992d8 is in the export and appears verbatim in the prompt
 [PASS] prompt never asks the model for a severity or score
 [PASS] prompt template has no hard-coded numbers
+[PASS] theme catalogue reaches the prompt (read from the schema, not typed in it)
 [PASS] three severity thresholds are named int constants in tagging_schema.py  - HIGH_MIN_MENTIONS=5, MEDIUM_MIN_MENTIONS=2, LOW_MIN_MENTIONS=1
 [PASS] thresholds match the spec: high >= 5 mentions, medium 2-4, low 1
 [PASS] mention count -> severity follows the thresholds  - {0: 'none', 1: 'low', 2: 'medium', 3: 'medium', 4: 'medium', 5: 'high', 6: 'high', 7: 'high'}
 [PASS] severity is per theme from mention counts (six crash reviews -> high, one -> low)
 [PASS] neither tags are not counted as a theme
+[PASS] every corrected theme in the audit (build_tag_audit.AUDIT) is in THEME_CATALOGUE under its category  - 8 themes
+[PASS] theme field is an enum of exactly the catalogue names
+[PASS] no theme name appears under two categories
 [PASS] WINNER_RULE is defined once in the schema and read into the prompt
 [PASS] THEME_RULE is defined once in the schema and read into the prompt
 [PASS] QUOTE_RULE is defined once in the schema and read into the prompt
@@ -64,6 +80,8 @@ Result: 33/33 checks passed
 [PASS] schema rejects: neither with an invented theme
 [PASS] schema rejects: flaw without a theme
 [PASS] schema rejects: flaw without a quote
+[PASS] schema rejects: a free-text theme outside the catalogue (audit F1-F3)
+[PASS] schema rejects: a flaw theme on a feature_request (audit F4)
 [PASS] schema rejects: unknown category
 
 ==============================================================================
@@ -99,7 +117,19 @@ Why: it is praise plus a wish to change what the free plan includes. Nothing is 
 Return exactly ONE tag per review. If the review raises more than one issue, pick the winner like this: choose the category that comes first in this order: product_flaw, then feature_request, then neither. If several issues share that category, choose the one the review mentions first. Ignore the other issues; do not mention them in the tag.
 
 ## Theme
-A short lowercase label naming the feature and the problem or wish, such as 'pdf export fails', 'text box lag', 'pro items not marked', 'brand kit on mobile'. Use the same wording for the same problem every time, because reviews are counted by theme. For neither, leave theme empty.
+Pick the theme from this fixed list, copied exactly. Name the problem, not what triggered it, and use the same theme for the same problem even if the review words it differently. A feature_request theme names the wish, never a fault. Use 'other flaw' or 'other request' only when nothing in the list fits. For neither, leave theme empty.
+For product_flaw, use one of:
+- 'app crashes': the app closes itself, or freezes and then closes, whatever triggered it (opening a template, adding photos, opening a large design)
+- 'text box lag': typing in or moving a text box is slow, delayed, jumpy or choppy
+- 'pdf export fails': PDF export does not complete: it errors or stops near the end. Slow but finishing is NOT this theme (use other flaw)
+- 'mp4 export stuck at 99%': MP4 / video export stalls or stops at 99% and never finishes
+- 'pro items not marked': the user only learns that an element, font, sticker or tool is Pro when saving or downloading
+- 'other flaw': a flaw that fits none of the themes above
+For feature_request, use one of:
+- 'keyboard shortcuts on ipad': wants keyboard shortcuts to work with a keyboard on iPad
+- 'layers panel on mobile': wants the desktop layers panel in the mobile editor
+- 'brand kit on mobile': wants brand kit (saved brand colours, fonts) in the mobile editor
+- 'other request': a request that fits none of the themes above
 
 ## Quote
 Copy ONE sentence from the review exactly as written: same spelling, capitals, punctuation and spacing. Never reword, shorten, merge sentences or fix typos. If you cannot copy it exactly, choose a different sentence. For product_flaw or feature_request, copy the sentence that shows the winning issue.

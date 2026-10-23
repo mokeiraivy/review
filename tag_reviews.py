@@ -47,7 +47,7 @@ from pathlib import Path
 import pandas as pd
 
 from tagging_prompt import TAGGING_PROMPT
-from tagging_schema import Category, ReviewTag, theme_summary
+from tagging_schema import OTHER_FLAW, OTHER_REQUEST, Category, ReviewTag, theme_summary
 
 CLEANED = Path("output/cleaned_reviews.csv")
 TAGS_OUT = Path("output/tagged_reviews.csv")
@@ -239,6 +239,14 @@ def report(log: Tee, out: pd.DataFrame, tags):
             log(f"  {r.review_id}")
             log(f"    model said: {r.model_quote!r}")
             log(f"    replaced by: {r.quote!r}")
+
+    others = out[out["theme"].isin([OTHER_FLAW, OTHER_REQUEST])]
+    log("")
+    log(f"THEMES OUTSIDE THE CATALOGUE ('other flaw' / 'other request'): {len(others)}")
+    for r in others.itertuples(index=False):
+        log(f"  {r.review_id}  {r.theme}: {r.reason}")
+    if len(others):
+        log("  -> review these and add a catalogue theme in tagging_schema.py if one repeats")
 
     log("")
     log("MENTIONS PER THEME (severity: high >= 5, medium 2-4, low 1)")

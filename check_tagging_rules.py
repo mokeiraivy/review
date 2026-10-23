@@ -53,6 +53,8 @@ check("prompt never asks the model for a severity or score",
       not re.search(r"severity|impact|score", rendered, re.I))
 digits = re.findall(r"\d", PROMPT_TEMPLATE)
 check("prompt template has no hard-coded numbers", not digits, f"found {digits}" if digits else "")
+check("theme catalogue reaches the prompt (read from the schema, not typed in it)",
+      all(t in rendered for t in S.ALL_THEMES) and not any(f"'{t}'" in PROMPT_TEMPLATE for t in S.ALL_THEMES))
 
 # 3. Thresholds are named mention-count constants, applied per theme
 names = ["HIGH_MIN_MENTIONS", "MEDIUM_MIN_MENTIONS", "LOW_MIN_MENTIONS"]
@@ -74,17 +76,27 @@ def tag(category, theme, quote="x"):
 
 # A crash six users hit must rank above a crash one user hit once.
 demo_tags = ([tag("product_flaw", "app crashes")] * 6
-             + [tag("product_flaw", "freezes on open")]
-             + [tag("product_flaw", "mp4 export stuck")] * 3
+             + [tag("product_flaw", "text box lag")]
+             + [tag("product_flaw", "mp4 export stuck at 99%")] * 3
              + [tag("feature_request", "brand kit on mobile")] * 2
              + [tag("neither", None, quote=None)] * 4)
 summary = S.theme_summary(demo_tags)
 by_theme = {r["theme"]: r for r in summary}
 check("severity is per theme from mention counts (six crash reviews -> high, one -> low)",
       by_theme["app crashes"]["severity"] == "high"
-      and by_theme["freezes on open"]["severity"] == "low"
-      and by_theme["mp4 export stuck"]["severity"] == "medium")
+      and by_theme["text box lag"]["severity"] == "low"
+      and by_theme["mp4 export stuck at 99%"]["severity"] == "medium")
 check("neither tags are not counted as a theme", all(r["category"] != "neither" for r in summary))
+
+# 3b. Theme catalogue (stage 4 fix): every audited theme exists, in the right category
+from build_tag_audit import AUDIT  # the audit judgements themselves, not a generated file
+_needed = {(label_after, theme_after) for (_, label_after, _, theme_after, _, _) in AUDIT.values()
+           if label_after != "neither"}
+check("every corrected theme in the audit (build_tag_audit.AUDIT) is in THEME_CATALOGUE under its category",
+      all(th in S.THEME_CATALOGUE[S.Category(cat)] for cat, th in _needed), f"{len(_needed)} themes")
+check("theme field is an enum of exactly the catalogue names",
+      S.ReviewTag.model_json_schema()["properties"]["theme"]["anyOf"][0]["enum"] == list(S.ALL_THEMES))
+check("no theme name appears under two categories", len(S.ALL_THEMES) == len(set(S.ALL_THEMES)))
 
 # 4. Rules written once, in the schema
 rules = {"WINNER_RULE": S.WINNER_RULE, "THEME_RULE": S.THEME_RULE,
@@ -137,7 +149,11 @@ bad_cases = {
     "neither with an invented quote": {"category": "neither", "quote": "Love it", "reason": "x"},
     "neither with an invented theme": {"category": "neither", "theme": "pricing", "reason": "x"},
     "flaw without a theme": {"category": "product_flaw", "quote": "x", "reason": "x"},
-    "flaw without a quote": {"category": "product_flaw", "theme": "crash", "reason": "x"},
+    "flaw without a quote": {"category": "product_flaw", "theme": "app crashes", "reason": "x"},
+    "a free-text theme outside the catalogue (audit F1-F3)":
+        {"category": "product_flaw", "theme": "crash on template tap", "quote": "x", "reason": "x"},
+    "a flaw theme on a feature_request (audit F4)":
+        {"category": "feature_request", "theme": "app crashes", "quote": "x", "reason": "x"},
     "unknown category": {**winner, "category": "bug"},
 }
 for name, data in bad_cases.items():
