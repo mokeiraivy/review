@@ -1,0 +1,88 @@
+STAGE 4 - TAGGING AUDIT
+Source (before): audit\tagged_reviews_before.csv   Rerun (after): output\tagged_reviews.csv
+
+Reviews in export:   18
+Rows in audit:       18  (every review covered: YES)
+Label fits = yes:    18   no: 0
+Rows changed:        6   no change: 12
+Blank change cells:  0
+Rerun matches audit: 18/18
+
+    review_id    label_before label_fits                              theme_before                                                   theme_judgement                theme_after                                      change finding                rerun_theme rerun_matches_audit
+rv_cbe4c75fba    product_flaw        yes                              text box lag                                                tight and specific               text box lag                                   no change                       text box lag                 yes
+rv_e5da5d4c58    product_flaw        yes                     crash on template tap             too narrow: names the trigger, splits the crash count                app crashes             theme merged into 'app crashes'      F3                app crashes                 yes
+rv_b4b6fd5646 feature_request        yes            keyboard shortcuts not working                  worded as a fault, contradicts the request label keyboard shortcuts on ipad                   theme renamed as the wish      F4 keyboard shortcuts on ipad                 yes
+rv_b1f196379e    product_flaw        yes                          pdf export fails                                                tight and specific           pdf export fails                                   no change                   pdf export fails                 yes
+rv_2626e4c6db feature_request        yes                    layers panel on mobile                                                tight and specific     layers panel on mobile                                   no change             layers panel on mobile                 yes
+rv_e1e73fa600    product_flaw        yes                      pro items not marked                                                tight and specific       pro items not marked                                   no change               pro items not marked                 yes
+rv_aba4ca6b7b    product_flaw        yes                   mp4 export stuck at 99%                                                tight and specific    mp4 export stuck at 99%                                   no change            mp4 export stuck at 99%                 yes
+rv_0adbf47db0    product_flaw        yes             app closes when adding photos             too narrow: names the trigger, splits the crash count                app crashes             theme merged into 'app crashes'      F3                app crashes                 yes
+rv_e209f393ab feature_request        yes                       brand kit on mobile                                                tight and specific        brand kit on mobile                                   no change                brand kit on mobile                 yes
+rv_76433a6ce6    product_flaw        yes                              text box lag                                                tight and specific               text box lag                                   no change                       text box lag                 yes
+rv_36484054c9    product_flaw        yes                      pro items not marked                                                tight and specific       pro items not marked                                   no change               pro items not marked                 yes
+rv_cdf86c6e0b    product_flaw        yes                          pdf export fails                                                tight and specific           pdf export fails                                   no change                   pdf export fails                 yes
+rv_49906f6ab7    product_flaw        yes freezes and crashes on text-heavy designs             too narrow: names the trigger, splits the crash count                app crashes             theme merged into 'app crashes'      F3                app crashes                 yes
+rv_742b5bf9a0    product_flaw        yes                              text box lag                                                tight and specific               text box lag                                   no change                       text box lag                 yes
+rv_5e547992d8         neither        yes                                                                    n/a: neither keeps theme empty (correct)                                                              no change                                                    yes
+rv_b8f9550896    product_flaw        yes                      pro items not marked                                                tight and specific       pro items not marked                                   no change               pro items not marked                 yes
+rv_4e1bf0fa7c    product_flaw        yes                         mp4 export stalls                    duplicate wording of 'mp4 export stuck at 99%'    mp4 export stuck at 99% theme merged into 'mp4 export stuck at 99%'      F1    mp4 export stuck at 99%                 yes
+rv_6866864537    product_flaw        yes         background remover not marked pro duplicate: same Pro-at-download problem as 'pro items not marked'       pro items not marked    theme merged into 'pro items not marked'      F2       pro items not marked                 yes
+
+FINDINGS (each traced to rows above and to a change in the chain)
+  F1  Same problem, two labels: MP4 export stuck at 99%
+      rows changed: rv_4e1bf0fa7c
+      found: rv_aba4ca6b7b got 'mp4 export stuck at 99%' and rv_4e1bf0fa7c got 'mp4 export stalls'. Both reviews say MP4 export stops at 99% and never finishes. Split, each counts 1 (low); together they are 2 (medium).
+      fix:   Fixed theme catalogue in tagging_schema.py: one entry 'mp4 export stuck at 99%'.
+  F2  Same problem, two labels: Pro shown only at download
+      rows changed: rv_6866864537
+      found: rv_6866864537 got 'background remover not marked pro' while three other reviews with the same problem (Pro revealed only at save/download) got 'pro items not marked'. The count shows 3 + 1 instead of 4.
+      fix:   Fixed theme catalogue: one entry 'pro items not marked', defined to cover any element, font or tool the user only learns is Pro at save or download.
+  F3  Same problem, three labels: app crashes
+      rows changed: rv_e5da5d4c58, rv_0adbf47db0, rv_49906f6ab7
+      found: rv_e5da5d4c58 'crash on template tap', rv_0adbf47db0 'app closes when adding photos' and rv_49906f6ab7 'freezes and crashes on text-heavy designs' all describe the app closing itself. The labels name the trigger instead of the problem, so each counts 1 (low); together they are 3 (medium).
+      fix:   Fixed theme catalogue: one entry 'app crashes', defined as the app closing itself whatever triggered it.
+  F4  Request theme worded as a fault
+      rows changed: rv_b4b6fd5646
+      found: rv_b4b6fd5646 is correctly a feature_request, but its theme 'keyboard shortcuts not working' reads like a bug, which contradicts the label on the dashboard card.
+      fix:   Fixed theme catalogue: request themes are named as the wish ('keyboard shortcuts on ipad'), and the schema rejects a theme from the wrong category.
+  Root cause of F1-F3: the chain tags each review in a separate call, so the model never sees the themes it gave earlier reviews. The old rule 'use the same wording every time' could not be followed. The fix replaces free-text themes with a fixed catalogue the model must pick from.
+
+CONSIDERED, NOT CHANGED
+  - PDF export failing (rv_b1f196379e, rv_cdf86c6e0b) was NOT merged with MP4 stuck at 99%: different export format, likely a different fault, so they stay separate themes.
+  - Slow PDF export (second issue in rv_b8f9550896) was NOT merged into 'pdf export fails': slow still finishes. It is not counted this week because the one-winner rule picks that review's Pro complaint.
+  - Text lag in rv_cdf86c6e0b (second issue) is not counted: the one-winner rule picks the PDF export failure, which the review mentions first. No change.
+
+MENTIONS PER THEME (severity: high >= 5, medium 2-4, low 1)
+  before (chain output):
+    feature_request  keyboard shortcuts not working             1  low
+    feature_request  layers panel on mobile                     1  low
+    feature_request  brand kit on mobile                        1  low
+    product_flaw     text box lag                               3  medium
+    product_flaw     pro items not marked                       3  medium
+    product_flaw     pdf export fails                           2  medium
+    product_flaw     crash on template tap                      1  low
+    product_flaw     mp4 export stuck at 99%                    1  low
+    product_flaw     app closes when adding photos              1  low
+    product_flaw     freezes and crashes on text-heavy designs  1  low
+    product_flaw     mp4 export stalls                          1  low
+    product_flaw     background remover not marked pro          1  low
+  after (audited):
+    feature_request  keyboard shortcuts on ipad                 1  low
+    feature_request  layers panel on mobile                     1  low
+    feature_request  brand kit on mobile                        1  low
+    product_flaw     pro items not marked                       4  medium
+    product_flaw     text box lag                               3  medium
+    product_flaw     app crashes                                3  medium
+    product_flaw     pdf export fails                           2  medium
+    product_flaw     mp4 export stuck at 99%                    2  medium
+  rerun (fixed chain):
+    feature_request  keyboard shortcuts on ipad                 1  low
+    feature_request  layers panel on mobile                     1  low
+    feature_request  brand kit on mobile                        1  low
+    product_flaw     pro items not marked                       4  medium
+    product_flaw     text box lag                               3  medium
+    product_flaw     app crashes                                3  medium
+    product_flaw     pdf export fails                           2  medium
+    product_flaw     mp4 export stuck at 99%                    2  medium
+
+Saved audit table to audit\tag_audit.csv
